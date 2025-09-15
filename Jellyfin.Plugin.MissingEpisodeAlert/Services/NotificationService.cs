@@ -46,7 +46,9 @@ public class NotificationService
             
             if (missingEpisodeInfo.NextAvailableEpisode != null)
             {
-                message += $" Next available episode is S{missingEpisodeInfo.NextAvailableEpisode.ParentIndexNumber:D2}E{missingEpisodeInfo.NextAvailableEpisode.IndexNumber:D2}.";
+                var season = missingEpisodeInfo.NextAvailableEpisode.ParentIndexNumber ?? 0;
+                var episode = missingEpisodeInfo.NextAvailableEpisode.IndexNumber ?? 0;
+                message += $" Next available episode is S{season:D2}E{episode:D2}.";
             }
 
             var messageCommand = new MessageCommand

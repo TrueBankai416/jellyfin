@@ -118,6 +118,26 @@ public class MissingEpisodeDetectionService
                 };
             }
 
+            // Check for episodes in later seasons (cross-season gap detection)
+            var laterSeasonEpisodes = GetAllEpisodesAfterSeason(series, currentSeasonNumber);
+            if (laterSeasonEpisodes.Any())
+            {
+                var firstLaterEpisode = laterSeasonEpisodes.First();
+                var missingSeasonNumber = currentSeasonNumber + 1;
+                
+                _logger.LogInformation("Missing entire season detected: S{Season} in series {SeriesName}. Next available is S{Season}E{NextEpisode}", 
+                    missingSeasonNumber, series.Name, firstLaterEpisode.ParentIndexNumber, firstLaterEpisode.IndexNumber);
+
+                return new MissingEpisodeInfo
+                {
+                    SeriesName = series.Name,
+                    SeasonNumber = missingSeasonNumber,
+                    MissingEpisodeNumber = 1,
+                    NextAvailableEpisode = firstLaterEpisode,
+                    CurrentEpisode = currentEpisode
+                };
+            }
+
             _logger.LogDebug("No more episodes available after S{Season}E{Episode} in series {SeriesName}", 
                 currentSeasonNumber, currentEpisodeNumber, series.Name);
             return null; // No more episodes available (series ended)
@@ -138,6 +158,20 @@ public class MissingEpisodeDetectionService
             ParentIndexNumber = seasonNumber,
             IsVirtualItem = false
         }).Cast<Episode>().ToList();
+    }
+
+    private List<Episode> GetAllEpisodesAfterSeason(Series series, int currentSeasonNumber)
+    {
+        return _libraryManager.GetItemList(new InternalItemsQuery
+        {
+            AncestorIds = new[] { series.Id },
+            IncludeItemTypes = new[] { BaseItemKind.Episode },
+            IsVirtualItem = false
+        }).Cast<Episode>()
+        .Where(e => e.ParentIndexNumber.HasValue && e.ParentIndexNumber > currentSeasonNumber)
+        .OrderBy(e => e.ParentIndexNumber)
+        .ThenBy(e => e.IndexNumber)
+        .ToList();
     }
 }
 
