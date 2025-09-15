@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
@@ -18,7 +19,8 @@ public class PlaybackMonitorService : IDisposable
     private readonly MissingEpisodeDetectionService _detectionService;
     private readonly NotificationService _notificationService;
     private readonly ILogger<PlaybackMonitorService> _logger;
-    private bool _disposed = false;
+    private readonly ConcurrentDictionary<string, Guid> _blockedNextEpisodes = new();
+    private bool _disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PlaybackMonitorService"/> class.
@@ -43,6 +45,7 @@ public class PlaybackMonitorService : IDisposable
 
         // Subscribe to playback events
         _sessionManager.PlaybackStopped += OnPlaybackStopped;
+        _sessionManager.PlaybackStart += OnPlaybackStarted;
         
         _logger.LogInformation("PlaybackMonitorService initialized and listening for playback events");
     }
@@ -70,7 +73,7 @@ public class PlaybackMonitorService : IDisposable
 
                 // Check if the episode was played to completion (at least 90%)
                 var playedPercentage = e.PlayedToCompletion ? 100 : 
-                    (e.PlaybackPositionTicks.HasValue && episode.RunTimeTicks.HasValue && episode.RunTimeTicks > 0) ?
+                    (e.PlaybackPositionTicks.HasValue && episode.RunTimeTicks.HasValue && episode.RunTimeTicks.Value > 0) ?
                     (double)e.PlaybackPositionTicks.Value / episode.RunTimeTicks.Value * 100 : 0;
 
                 if (playedPercentage < 90)
@@ -80,7 +83,7 @@ public class PlaybackMonitorService : IDisposable
                 }
 
                 // Check for missing next episode
-                var missingEpisodeInfo = await _detectionService.CheckForMissingNextEpisodeAsync(episode);
+                var missingEpisodeInfo = await _detectionService.CheckForMissingNextEpisodeAsync(episode).ConfigureAwait(false);
                 
                 if (missingEpisodeInfo != null)
                 {
@@ -88,11 +91,15 @@ public class PlaybackMonitorService : IDisposable
                         missingEpisodeInfo.MissingEpisodeIdentifier, missingEpisodeInfo.SeriesName);
 
                     // Send notification to the user
-                    await _notificationService.SendMissingEpisodeNotificationAsync(e.Session, missingEpisodeInfo);
+                    await _notificationService.SendMissingEpisodeNotificationAsync(e.Session, missingEpisodeInfo).ConfigureAwait(false);
 
-                    // TODO: Implement auto-play prevention logic
-                    // This would require hooking into the next episode selection logic
-                    // which might need to be done at the client level or through session commands
+                    // Implement auto-play prevention by blocking the next available episode
+                    if (config.PreventAutoPlay && missingEpisodeInfo.NextAvailableEpisode != null)
+                    {
+                        _blockedNextEpisodes[e.Session.Id] = missingEpisodeInfo.NextAvailableEpisode.Id;
+                        _logger.LogDebug("Blocked auto-play of next available episode {EpisodeId} for session {SessionId}", 
+                            missingEpisodeInfo.NextAvailableEpisode.Id, e.Session.Id);
+                    }
                 }
             }
         }
@@ -102,12 +109,43 @@ public class PlaybackMonitorService : IDisposable
         }
     }
 
+    private async void OnPlaybackStarted(object? sender, PlaybackProgressEventArgs e)
+    {
+        try
+        {
+            var config = Plugin.Instance?.Configuration;
+            if (config == null || !config.EnablePlugin || !config.PreventAutoPlay)
+            {
+                return;
+            }
+
+            // Check if this episode should be blocked
+            if (_blockedNextEpisodes.TryRemove(e.Session.Id, out var blockedEpisodeId) && 
+                e.Item?.Id == blockedEpisodeId)
+            {
+                _logger.LogInformation("Stopping auto-play of blocked episode {EpisodeId} for session {SessionId}", 
+                    blockedEpisodeId, e.Session.Id);
+
+                // Stop playback immediately
+                await _sessionManager.SendPlaystateCommand(e.Session.Id, e.Session.Id, new PlaystateRequest
+                {
+                    Command = PlaystateCommand.Stop
+                }, default).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error handling playback started event");
+        }
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
         if (!_disposed)
         {
             _sessionManager.PlaybackStopped -= OnPlaybackStopped;
+            _sessionManager.PlaybackStart -= OnPlaybackStarted;
             _disposed = true;
             _logger.LogInformation("PlaybackMonitorService disposed");
         }

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Jellyfin.Plugin.MissingEpisodeAlert")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+757c3ac68363ce3b2da7598f7dc8e7f572e49a21")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0884e8046561eadac0e985e4eab1f4f49ff65095")]
 [assembly: System.Reflection.AssemblyProductAttribute("Jellyfin.Plugin.MissingEpisodeAlert")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Jellyfin.Plugin.MissingEpisodeAlert")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -51,12 +51,6 @@
             <param name="applicationPaths">Instance of the <see cref="T:MediaBrowser.Common.Configuration.IApplicationPaths"/> interface.</param>
             <param name="xmlSerializer">Instance of the <see cref="T:MediaBrowser.Model.Serialization.IXmlSerializer"/> interface.</param>
         </member>
-        <member name="M:Jellyfin.Plugin.MissingEpisodeAlert.Plugin.InitializeServices(System.IServiceProvider)">
-            <summary>
-            Initializes the plugin services. This should be called after dependency injection is set up.
-            </summary>
-            <param name="serviceProvider">The service provider.</param>
-        </member>
         <member name="P:Jellyfin.Plugin.MissingEpisodeAlert.Plugin.Name">
             <inheritdoc />
         </member>
@@ -74,11 +68,6 @@
         <member name="M:Jellyfin.Plugin.MissingEpisodeAlert.Plugin.GetPages">
             <inheritdoc />
         </member>
-        <member name="M:Jellyfin.Plugin.MissingEpisodeAlert.Plugin.DisposeServices">
-            <summary>
-            Disposes the plugin resources.
-            </summary>
-        </member>
         <member name="T:Jellyfin.Plugin.MissingEpisodeAlert.PluginServiceRegistrator">
             <summary>
             Plugin service registrator for dependency injection.
@@ -87,28 +76,28 @@
         <member name="M:Jellyfin.Plugin.MissingEpisodeAlert.PluginServiceRegistrator.RegisterServices(Microsoft.Extensions.DependencyInjection.IServiceCollection,MediaBrowser.Controller.IServerApplicationHost)">
             <inheritdoc />
         </member>
-        <member name="T:Jellyfin.Plugin.MissingEpisodeAlert.IPluginServiceInitializer">
+        <member name="T:Jellyfin.Plugin.MissingEpisodeAlert.IPluginInitializer">
             <summary>
-            Service initializer for the plugin.
+            Interface for plugin initialization.
             </summary>
         </member>
-        <member name="M:Jellyfin.Plugin.MissingEpisodeAlert.IPluginServiceInitializer.Initialize">
+        <member name="P:Jellyfin.Plugin.MissingEpisodeAlert.IPluginInitializer.IsInitialized">
             <summary>
-            Initialize plugin services.
+            Gets a value indicating whether the plugin is initialized.
             </summary>
         </member>
-        <member name="T:Jellyfin.Plugin.MissingEpisodeAlert.PluginServiceInitializer">
+        <member name="T:Jellyfin.Plugin.MissingEpisodeAlert.PluginInitializer">
             <summary>
-            Implementation of plugin service initializer.
+            Plugin initializer that ensures services are instantiated.
             </summary>
         </member>
-        <member name="M:Jellyfin.Plugin.MissingEpisodeAlert.PluginServiceInitializer.#ctor(System.IServiceProvider)">
+        <member name="M:Jellyfin.Plugin.MissingEpisodeAlert.PluginInitializer.#ctor(Jellyfin.Plugin.MissingEpisodeAlert.Services.PlaybackMonitorService)">
             <summary>
-            Initializes a new instance of the <see cref="T:Jellyfin.Plugin.MissingEpisodeAlert.PluginServiceInitializer"/> class.
+            Initializes a new instance of the <see cref="T:Jellyfin.Plugin.MissingEpisodeAlert.PluginInitializer"/> class.
             </summary>
-            <param name="serviceProvider">The service provider.</param>
+            <param name="playbackMonitorService">The playback monitor service to initialize.</param>
         </member>
-        <member name="M:Jellyfin.Plugin.MissingEpisodeAlert.PluginServiceInitializer.Initialize">
+        <member name="P:Jellyfin.Plugin.MissingEpisodeAlert.PluginInitializer.IsInitialized">
             <inheritdoc />
         </member>
         <member name="T:Jellyfin.Plugin.MissingEpisodeAlert.Services.MissingEpisodeDetectionService">

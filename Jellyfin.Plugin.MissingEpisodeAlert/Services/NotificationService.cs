@@ -55,7 +55,7 @@ public class NotificationService
                 TimeoutMs = config.NotificationDurationSeconds * 1000
             };
 
-            await _sessionManager.SendMessageCommand(session.Id, session.Id, messageCommand, default);
+            await _sessionManager.SendMessageCommand(session.Id, session.Id, messageCommand, default).ConfigureAwait(false);
             
             _logger.LogInformation("Sent missing episode notification to user {UserId} in session {SessionId}: {Message}", 
                 session.UserId, session.Id, message);

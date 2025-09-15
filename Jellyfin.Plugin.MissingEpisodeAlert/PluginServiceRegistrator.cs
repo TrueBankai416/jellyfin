@@ -1,4 +1,3 @@
-using System;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,41 +17,38 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<NotificationService>();
         serviceCollection.AddSingleton<PlaybackMonitorService>();
         
-        // Initialize plugin services after registration
-        serviceCollection.AddSingleton<IPluginServiceInitializer, PluginServiceInitializer>();
+        // Force instantiation of PlaybackMonitorService to ensure event subscription
+        serviceCollection.AddSingleton<IPluginInitializer>(provider => 
+            new PluginInitializer(provider.GetRequiredService<PlaybackMonitorService>()));
     }
 }
 
 /// <summary>
-/// Service initializer for the plugin.
+/// Interface for plugin initialization.
 /// </summary>
-public interface IPluginServiceInitializer
+public interface IPluginInitializer
 {
     /// <summary>
-    /// Initialize plugin services.
+    /// Gets a value indicating whether the plugin is initialized.
     /// </summary>
-    void Initialize();
+    bool IsInitialized { get; }
 }
 
 /// <summary>
-/// Implementation of plugin service initializer.
+/// Plugin initializer that ensures services are instantiated.
 /// </summary>
-public class PluginServiceInitializer : IPluginServiceInitializer
+public class PluginInitializer : IPluginInitializer
 {
-    private readonly IServiceProvider _serviceProvider;
-
     /// <summary>
-    /// Initializes a new instance of the <see cref="PluginServiceInitializer"/> class.
+    /// Initializes a new instance of the <see cref="PluginInitializer"/> class.
     /// </summary>
-    /// <param name="serviceProvider">The service provider.</param>
-    public PluginServiceInitializer(IServiceProvider serviceProvider)
+    /// <param name="playbackMonitorService">The playback monitor service to initialize.</param>
+    public PluginInitializer(PlaybackMonitorService playbackMonitorService)
     {
-        _serviceProvider = serviceProvider;
+        // The service is instantiated by DI, which triggers its constructor and event subscription
+        IsInitialized = playbackMonitorService != null;
     }
 
     /// <inheritdoc />
-    public void Initialize()
-    {
-        Plugin.Instance?.InitializeServices(_serviceProvider);
-    }
+    public bool IsInitialized { get; }
 }
