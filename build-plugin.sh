@@ -24,14 +24,23 @@ if [ $? -eq 0 ]; then
     # Copy the DLL to releases directory
     cp bin/Release/net8.0/Jellyfin.Plugin.MissingEpisodeAlert.dll ../releases/v1.0.0/
     
+    # Create ZIP package for Jellyfin plugin catalog
+    cd ../releases/v1.0.0/
+    zip Jellyfin.Plugin.MissingEpisodeAlert.zip Jellyfin.Plugin.MissingEpisodeAlert.dll
+    
+    # Calculate checksum for the ZIP file
+    CHECKSUM=$(md5sum Jellyfin.Plugin.MissingEpisodeAlert.zip | cut -d' ' -f1)
+    
     echo "Plugin DLL copied to releases/v1.0.0/"
+    echo "ZIP package created: releases/v1.0.0/Jellyfin.Plugin.MissingEpisodeAlert.zip"
+    echo "ZIP checksum: $CHECKSUM"
     echo ""
     echo "📦 Release package created!"
-    echo "Location: releases/v1.0.0/Jellyfin.Plugin.MissingEpisodeAlert.dll"
+    echo "Location: releases/v1.0.0/Jellyfin.Plugin.MissingEpisodeAlert.zip"
     echo ""
     echo "Next steps:"
-    echo "1. Upload the DLL to GitHub releases"
-    echo "2. Update the checksum in manifest.json"
+    echo "1. Update manifest.json checksum to: $CHECKSUM"
+    echo "2. Upload the ZIP to GitHub releases (not the DLL)"
     echo "3. Add your repository URL to Jellyfin: Dashboard > Plugins > Repositories"
     echo "   Repository URL: https://raw.githubusercontent.com/TrueBankai416/jellyfin/main/manifest.json"
 else
