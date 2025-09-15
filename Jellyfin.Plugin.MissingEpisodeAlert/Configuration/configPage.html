@@ -80,16 +80,21 @@
             var pluginId = "47E5A82C-2D97-4808-A5E3-F6B8B8B8B8B8";
 
             function loadPage(page, config) {
-                page.querySelector('#EnablePlugin').checked = config.EnablePlugin || false;
-                page.querySelector('#ShowNotificationPopup').checked = config.ShowNotificationPopup || false;
+                console.log('Loading config:', config);
+                page.querySelector('#EnablePlugin').checked = config.EnablePlugin !== false;
+                page.querySelector('#ShowNotificationPopup').checked = config.ShowNotificationPopup !== false;
                 page.querySelector('#NotificationDurationSeconds').value = config.NotificationDurationSeconds || 10;
-                page.querySelector('#CheckOnlyTvShows').checked = config.CheckOnlyTvShows || false;
-                page.querySelector('#PreventAutoPlay').checked = config.PreventAutoPlay || false;
+                page.querySelector('#CheckOnlyTvShows').checked = config.CheckOnlyTvShows !== false;
+                page.querySelector('#PreventAutoPlay').checked = config.PreventAutoPlay !== false;
             }
 
             function onSubmit(e) {
                 e.preventDefault();
-                Dashboard.showLoadingMsg();
+                console.log('Form submitted');
+                
+                if (Dashboard.showLoadingMsg) {
+                    Dashboard.showLoadingMsg();
+                }
 
                 var form = this;
                 var config = {
@@ -100,31 +105,66 @@
                     PreventAutoPlay: form.querySelector('#PreventAutoPlay').checked
                 };
 
+                console.log('Saving config:', config);
+
                 ApiClient.updatePluginConfiguration(pluginId, config).then(function (result) {
-                    Dashboard.processPluginConfigurationUpdateResult(result);
+                    console.log('Save result:', result);
+                    if (Dashboard.processPluginConfigurationUpdateResult) {
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                    } else if (Dashboard.hideLoadingMsg) {
+                        Dashboard.hideLoadingMsg();
+                        require(['toast'], function (toast) {
+                            toast('Settings saved.');
+                        });
+                    }
+                }).catch(function (error) {
+                    console.error('Save error:', error);
+                    if (Dashboard.hideLoadingMsg) {
+                        Dashboard.hideLoadingMsg();
+                    }
+                    require(['toast'], function (toast) {
+                        toast('Error saving settings: ' + error.message);
+                    });
                 });
 
                 return false;
             }
 
-            function getTabs() {
-                return [
-                    {
-                        href: Dashboard.getConfigurationPageUrl('MissingEpisodeAlertConfigPage'),
-                        name: 'Missing Episode Alert'
-                    }
-                ];
-            }
+            // Initialize page when DOM is ready
+            document.addEventListener('DOMContentLoaded', function() {
+                var page = document.querySelector('#MissingEpisodeAlertConfigPage');
+                if (!page) return;
 
-            $(document).on('pageinit', "#MissingEpisodeAlertConfigPage", function () {
-                var page = this;
+                var form = page.querySelector('#MissingEpisodeAlertConfigForm');
+                if (form) {
+                    form.addEventListener('submit', onSubmit);
+                }
 
-                $('#MissingEpisodeAlertConfigForm', page).on('submit', onSubmit);
-
+                // Load configuration
                 ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                    console.log('Loaded config:', config);
                     loadPage(page, config);
+                }).catch(function (error) {
+                    console.error('Load config error:', error);
                 });
             });
+
+            // Fallback for older Jellyfin versions that use jQuery
+            if (typeof $ !== 'undefined') {
+                $(document).on('pageinit', "#MissingEpisodeAlertConfigPage", function () {
+                    var page = this;
+                    var form = page.querySelector('#MissingEpisodeAlertConfigForm');
+                    if (form) {
+                        form.addEventListener('submit', onSubmit);
+                    }
+
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        loadPage(page, config);
+                    }).catch(function (error) {
+                        console.error('Load config error:', error);
+                    });
+                });
+            }
 
         })();
     </script>
