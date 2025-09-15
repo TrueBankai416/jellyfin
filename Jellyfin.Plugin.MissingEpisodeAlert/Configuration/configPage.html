@@ -100,7 +100,7 @@
                 var config = {
                     EnablePlugin: form.querySelector('#EnablePlugin').checked,
                     ShowNotificationPopup: form.querySelector('#ShowNotificationPopup').checked,
-                    NotificationDurationSeconds: parseInt(form.querySelector('#NotificationDurationSeconds').value || "10"),
+                    NotificationDurationSeconds: Math.max(1, Math.min(60, parseInt(form.querySelector('#NotificationDurationSeconds').value || "10", 10))),
                     CheckOnlyTvShows: form.querySelector('#CheckOnlyTvShows').checked,
                     PreventAutoPlay: form.querySelector('#PreventAutoPlay').checked
                 };
@@ -130,39 +130,35 @@
                 return false;
             }
 
-            // Initialize page when DOM is ready
-            document.addEventListener('DOMContentLoaded', function() {
-                var page = document.querySelector('#MissingEpisodeAlertConfigPage');
-                if (!page) return;
+            // Initialize immediately - elements exist in this HTML file
+            var page = document.querySelector('#MissingEpisodeAlertConfigPage');
+            var form = page.querySelector('#MissingEpisodeAlertConfigForm');
+            
+            if (form) {
+                console.log('Binding form submit handler');
+                form.addEventListener('submit', onSubmit);
+            }
 
-                var form = page.querySelector('#MissingEpisodeAlertConfigForm');
-                if (form) {
-                    form.addEventListener('submit', onSubmit);
-                }
-
-                // Load configuration
-                ApiClient.getPluginConfiguration(pluginId).then(function (config) {
-                    console.log('Loaded config:', config);
-                    loadPage(page, config);
-                }).catch(function (error) {
-                    console.error('Load config error:', error);
-                });
-            });
-
-            // Fallback for older Jellyfin versions that use jQuery
-            if (typeof $ !== 'undefined') {
-                $(document).on('pageinit', "#MissingEpisodeAlertConfigPage", function () {
-                    var page = this;
-                    var form = page.querySelector('#MissingEpisodeAlertConfigForm');
-                    if (form) {
-                        form.addEventListener('submit', onSubmit);
-                    }
-
+            // Load configuration when view is shown (SPA compatibility)
+            if (page) {
+                page.addEventListener('viewshow', function() {
+                    console.log('View shown, loading configuration');
                     ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        console.log('Loaded config:', config);
                         loadPage(page, config);
                     }).catch(function (error) {
                         console.error('Load config error:', error);
                     });
+                });
+            }
+
+            // Initial load for non-SPA environments
+            if (ApiClient && typeof ApiClient.getPluginConfiguration === 'function') {
+                ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                    console.log('Initial config load:', config);
+                    loadPage(page, config);
+                }).catch(function (error) {
+                    console.error('Initial load config error:', error);
                 });
             }
 
