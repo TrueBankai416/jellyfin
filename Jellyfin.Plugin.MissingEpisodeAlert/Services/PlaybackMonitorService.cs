@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
@@ -123,10 +124,10 @@ public class PlaybackMonitorService : IDisposable
                     blockedEpisodeId, e.Session.Id);
 
                 // Stop playback immediately
-                await _sessionManager.SendPlaystateCommand(e.Session.Id, e.Session.Id, new PlaystateRequest
+                await _sessionManager.SendPlaystateCommand(e.Session.Id, e.Session.UserId.ToString(), new PlaystateRequest
                 {
                     Command = PlaystateCommand.Stop
-                }, default).ConfigureAwait(false);
+                }, CancellationToken.None).ConfigureAwait(false);
             }
         }
         catch (Exception ex)

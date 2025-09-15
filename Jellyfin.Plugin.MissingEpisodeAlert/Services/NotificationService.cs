@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Model.Session;
@@ -55,7 +56,7 @@ public class NotificationService
                 TimeoutMs = config.NotificationDurationSeconds * 1000
             };
 
-            await _sessionManager.SendMessageCommand(session.Id, session.Id, messageCommand, default).ConfigureAwait(false);
+            await _sessionManager.SendMessageCommand(session.Id, session.UserId.ToString(), messageCommand, CancellationToken.None).ConfigureAwait(false);
             
             _logger.LogInformation("Sent missing episode notification to user {UserId} in session {SessionId}: {Message}", 
                 session.UserId, session.Id, message);

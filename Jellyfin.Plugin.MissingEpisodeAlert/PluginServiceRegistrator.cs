@@ -51,7 +51,7 @@ public class PlaybackMonitorHostedService : IHostedService
     /// <inheritdoc />
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        _playbackMonitorService?.Dispose();
+        // PlaybackMonitorService will be disposed by DI as a singleton
         return Task.CompletedTask;
     }
 }
