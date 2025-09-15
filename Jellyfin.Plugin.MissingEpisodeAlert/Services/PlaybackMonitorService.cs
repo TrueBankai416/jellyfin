@@ -117,9 +117,12 @@ public class PlaybackMonitorService : IDisposable
             }
 
             // Check if this episode should be blocked
-            if (_blockedNextEpisodes.TryRemove(e.Session.Id, out var blockedEpisodeId) && 
+            if (_blockedNextEpisodes.TryGetValue(e.Session.Id, out var blockedEpisodeId) && 
                 e.Item?.Id == blockedEpisodeId)
             {
+                // Remove the block and stop playback
+                _blockedNextEpisodes.TryRemove(e.Session.Id, out _);
+                
                 _logger.LogInformation("Stopping auto-play of blocked episode {EpisodeId} for session {SessionId}", 
                     blockedEpisodeId, e.Session.Id);
 
