@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Missing Episode Alert</title>
+</head>
+<body>
+    <div id="MissingEpisodeAlertConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox,emby-select">
+        <div data-role="content">
+            <div class="content-primary">
+                <form id="MissingEpisodeAlertConfigForm">
+                    <div class="sectionTitleContainer flex align-items-center">
+                        <h2 class="sectionTitle">Missing Episode Alert Configuration</h2>
+                    </div>
+                    <div class="verticalSection">
+                        <div class="sectionTitleContainer flex align-items-center">
+                            <h3 class="sectionTitle">General Settings</h3>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="EnablePlugin" name="EnablePlugin" type="checkbox" is="emby-checkbox" />
+                                <span>Enable Missing Episode Alert</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">
+                                Enable or disable the Missing Episode Alert plugin functionality.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="CheckOnlyTvShows" name="CheckOnlyTvShows" type="checkbox" is="emby-checkbox" />
+                                <span>Check Only TV Shows</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">
+                                Only check for missing episodes in TV shows (recommended).
+                            </div>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="PreventAutoPlay" name="PreventAutoPlay" type="checkbox" is="emby-checkbox" />
+                                <span>Prevent Auto-Play</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">
+                                Prevent automatic playback of the next available episode when there's a gap in the sequence.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="verticalSection">
+                        <div class="sectionTitleContainer flex align-items-center">
+                            <h3 class="sectionTitle">Notification Settings</h3>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="ShowNotificationPopup" name="ShowNotificationPopup" type="checkbox" is="emby-checkbox" />
+                                <span>Show Notification Popup</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">
+                                Display a popup notification when a missing episode is detected.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="NotificationDurationSeconds">Notification Duration (seconds)</label>
+                            <input id="NotificationDurationSeconds" name="NotificationDurationSeconds" type="number" is="emby-input" min="1" max="60" />
+                            <div class="fieldDescription">
+                                How long to display the notification popup (1-60 seconds).
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block">
+                            <span>Save</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        (function () {
+            var pluginId = "47E5A82C-2D97-4808-A5E3-F6B8B8B8B8B8";
+
+            function loadPage(page, config) {
+                console.log('Loading config:', config);
+                page.querySelector('#EnablePlugin').checked = config.EnablePlugin !== false;
+                page.querySelector('#ShowNotificationPopup').checked = config.ShowNotificationPopup !== false;
+                page.querySelector('#NotificationDurationSeconds').value = config.NotificationDurationSeconds || 10;
+                page.querySelector('#CheckOnlyTvShows').checked = config.CheckOnlyTvShows !== false;
+                page.querySelector('#PreventAutoPlay').checked = config.PreventAutoPlay !== false;
+            }
+
+            function onSubmit(e) {
+                e.preventDefault();
+                console.log('Form submitted');
+                
+                if (Dashboard.showLoadingMsg) {
+                    Dashboard.showLoadingMsg();
+                }
+
+                var form = this;
+                var config = {
+                    EnablePlugin: form.querySelector('#EnablePlugin').checked,
+                    ShowNotificationPopup: form.querySelector('#ShowNotificationPopup').checked,
+                    NotificationDurationSeconds: Math.max(1, Math.min(60, parseInt(form.querySelector('#NotificationDurationSeconds').value || "10", 10))),
+                    CheckOnlyTvShows: form.querySelector('#CheckOnlyTvShows').checked,
+                    PreventAutoPlay: form.querySelector('#PreventAutoPlay').checked
+                };
+
+                console.log('Saving config:', config);
+
+                ApiClient.updatePluginConfiguration(pluginId, config).then(function (result) {
+                    console.log('Save result:', result);
+                    if (Dashboard.processPluginConfigurationUpdateResult) {
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                    } else if (Dashboard.hideLoadingMsg) {
+                        Dashboard.hideLoadingMsg();
+                        require(['toast'], function (toast) {
+                            toast('Settings saved.');
+                        });
+                    }
+                }).catch(function (error) {
+                    console.error('Save error:', error);
+                    if (Dashboard.hideLoadingMsg) {
+                        Dashboard.hideLoadingMsg();
+                    }
+                    require(['toast'], function (toast) {
+                        toast('Error saving settings: ' + error.message);
+                    });
+                });
+
+                return false;
+            }
+
+            // Initialize immediately - elements exist in this HTML file
+            var page = document.querySelector('#MissingEpisodeAlertConfigPage');
+            var form = page.querySelector('#MissingEpisodeAlertConfigForm');
+            
+            if (form) {
+                console.log('Binding form submit handler');
+                form.addEventListener('submit', onSubmit);
+            }
+
+            // Load configuration when view is shown (SPA compatibility)
+            if (page) {
+                page.addEventListener('viewshow', function() {
+                    console.log('View shown, loading configuration');
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        console.log('Loaded config:', config);
+                        loadPage(page, config);
+                    }).catch(function (error) {
+                        console.error('Load config error:', error);
+                    });
+                });
+            }
+
+            // Initial load for non-SPA environments
+            if (ApiClient && typeof ApiClient.getPluginConfiguration === 'function') {
+                ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                    console.log('Initial config load:', config);
+                    loadPage(page, config);
+                }).catch(function (error) {
+                    console.error('Initial load config error:', error);
+                });
+            }
+
+        })();
+    </script>
+</body>
+</html>
