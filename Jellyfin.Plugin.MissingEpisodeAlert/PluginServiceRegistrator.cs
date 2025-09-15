@@ -1,6 +1,9 @@
+using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Jellyfin.Plugin.MissingEpisodeAlert.Services;
 
 namespace Jellyfin.Plugin.MissingEpisodeAlert;
@@ -17,38 +20,38 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<NotificationService>();
         serviceCollection.AddSingleton<PlaybackMonitorService>();
         
-        // Force instantiation of PlaybackMonitorService to ensure event subscription
-        serviceCollection.AddSingleton<IPluginInitializer>(provider => 
-            new PluginInitializer(provider.GetRequiredService<PlaybackMonitorService>()));
+        // Use hosted service to ensure PlaybackMonitorService is instantiated
+        serviceCollection.AddHostedService<PlaybackMonitorHostedService>();
     }
 }
 
 /// <summary>
-/// Interface for plugin initialization.
+/// Hosted service that ensures PlaybackMonitorService is instantiated and properly disposed.
 /// </summary>
-public interface IPluginInitializer
+public class PlaybackMonitorHostedService : IHostedService
 {
-    /// <summary>
-    /// Gets a value indicating whether the plugin is initialized.
-    /// </summary>
-    bool IsInitialized { get; }
-}
+    private readonly PlaybackMonitorService _playbackMonitorService;
 
-/// <summary>
-/// Plugin initializer that ensures services are instantiated.
-/// </summary>
-public class PluginInitializer : IPluginInitializer
-{
     /// <summary>
-    /// Initializes a new instance of the <see cref="PluginInitializer"/> class.
+    /// Initializes a new instance of the <see cref="PlaybackMonitorHostedService"/> class.
     /// </summary>
-    /// <param name="playbackMonitorService">The playback monitor service to initialize.</param>
-    public PluginInitializer(PlaybackMonitorService playbackMonitorService)
+    /// <param name="playbackMonitorService">The playback monitor service.</param>
+    public PlaybackMonitorHostedService(PlaybackMonitorService playbackMonitorService)
     {
-        // The service is instantiated by DI, which triggers its constructor and event subscription
-        IsInitialized = playbackMonitorService != null;
+        _playbackMonitorService = playbackMonitorService;
     }
 
     /// <inheritdoc />
-    public bool IsInitialized { get; }
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
+        // Service is already instantiated by DI, which triggers event subscription
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        _playbackMonitorService?.Dispose();
+        return Task.CompletedTask;
+    }
 }

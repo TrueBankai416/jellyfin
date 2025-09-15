@@ -76,28 +76,21 @@
         <member name="M:Jellyfin.Plugin.MissingEpisodeAlert.PluginServiceRegistrator.RegisterServices(Microsoft.Extensions.DependencyInjection.IServiceCollection,MediaBrowser.Controller.IServerApplicationHost)">
             <inheritdoc />
         </member>
-        <member name="T:Jellyfin.Plugin.MissingEpisodeAlert.IPluginInitializer">
+        <member name="T:Jellyfin.Plugin.MissingEpisodeAlert.PlaybackMonitorHostedService">
             <summary>
-            Interface for plugin initialization.
+            Hosted service that ensures PlaybackMonitorService is instantiated and properly disposed.
             </summary>
         </member>
-        <member name="P:Jellyfin.Plugin.MissingEpisodeAlert.IPluginInitializer.IsInitialized">
+        <member name="M:Jellyfin.Plugin.MissingEpisodeAlert.PlaybackMonitorHostedService.#ctor(Jellyfin.Plugin.MissingEpisodeAlert.Services.PlaybackMonitorService)">
             <summary>
-            Gets a value indicating whether the plugin is initialized.
+            Initializes a new instance of the <see cref="T:Jellyfin.Plugin.MissingEpisodeAlert.PlaybackMonitorHostedService"/> class.
             </summary>
+            <param name="playbackMonitorService">The playback monitor service.</param>
         </member>
-        <member name="T:Jellyfin.Plugin.MissingEpisodeAlert.PluginInitializer">
-            <summary>
-            Plugin initializer that ensures services are instantiated.
-            </summary>
+        <member name="M:Jellyfin.Plugin.MissingEpisodeAlert.PlaybackMonitorHostedService.StartAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
         </member>
-        <member name="M:Jellyfin.Plugin.MissingEpisodeAlert.PluginInitializer.#ctor(Jellyfin.Plugin.MissingEpisodeAlert.Services.PlaybackMonitorService)">
-            <summary>
-            Initializes a new instance of the <see cref="T:Jellyfin.Plugin.MissingEpisodeAlert.PluginInitializer"/> class.
-            </summary>
-            <param name="playbackMonitorService">The playback monitor service to initialize.</param>
-        </member>
-        <member name="P:Jellyfin.Plugin.MissingEpisodeAlert.PluginInitializer.IsInitialized">
+        <member name="M:Jellyfin.Plugin.MissingEpisodeAlert.PlaybackMonitorHostedService.StopAsync(System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
         <member name="T:Jellyfin.Plugin.MissingEpisodeAlert.Services.MissingEpisodeDetectionService">
@@ -179,12 +172,11 @@
             Service for monitoring playback events and detecting missing episodes.
             </summary>
         </member>
-        <member name="M:Jellyfin.Plugin.MissingEpisodeAlert.Services.PlaybackMonitorService.#ctor(MediaBrowser.Controller.Session.ISessionManager,MediaBrowser.Controller.Library.ILibraryManager,Jellyfin.Plugin.MissingEpisodeAlert.Services.MissingEpisodeDetectionService,Jellyfin.Plugin.MissingEpisodeAlert.Services.NotificationService,Microsoft.Extensions.Logging.ILogger{Jellyfin.Plugin.MissingEpisodeAlert.Services.PlaybackMonitorService})">
+        <member name="M:Jellyfin.Plugin.MissingEpisodeAlert.Services.PlaybackMonitorService.#ctor(MediaBrowser.Controller.Session.ISessionManager,Jellyfin.Plugin.MissingEpisodeAlert.Services.MissingEpisodeDetectionService,Jellyfin.Plugin.MissingEpisodeAlert.Services.NotificationService,Microsoft.Extensions.Logging.ILogger{Jellyfin.Plugin.MissingEpisodeAlert.Services.PlaybackMonitorService})">
             <summary>
             Initializes a new instance of the <see cref="T:Jellyfin.Plugin.MissingEpisodeAlert.Services.PlaybackMonitorService"/> class.
             </summary>
             <param name="sessionManager">The session manager.</param>
-            <param name="libraryManager">The library manager.</param>
             <param name="detectionService">The missing episode detection service.</param>
             <param name="notificationService">The notification service.</param>
             <param name="logger">The logger.</param>

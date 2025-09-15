@@ -1,13 +1,13 @@
+/workspace/TrueBankai416_jellyfin/Jellyfin.Plugin.MissingEpisodeAlert/bin/Debug/net8.0/Jellyfin.Plugin.MissingEpisodeAlert.deps.json
+/workspace/TrueBankai416_jellyfin/Jellyfin.Plugin.MissingEpisodeAlert/bin/Debug/net8.0/Jellyfin.Plugin.MissingEpisodeAlert.dll
+/workspace/TrueBankai416_jellyfin/Jellyfin.Plugin.MissingEpisodeAlert/bin/Debug/net8.0/Jellyfin.Plugin.MissingEpisodeAlert.pdb
+/workspace/TrueBankai416_jellyfin/Jellyfin.Plugin.MissingEpisodeAlert/bin/Debug/net8.0/Jellyfin.Plugin.MissingEpisodeAlert.xml
 /workspace/TrueBankai416_jellyfin/Jellyfin.Plugin.MissingEpisodeAlert/obj/Debug/net8.0/Jellyfin.Plugin.MissingEpisodeAlert.csproj.AssemblyReference.cache
 /workspace/TrueBankai416_jellyfin/Jellyfin.Plugin.MissingEpisodeAlert/obj/Debug/net8.0/Jellyfin.Plugin.MissingEpisodeAlert.GeneratedMSBuildEditorConfig.editorconfig
 /workspace/TrueBankai416_jellyfin/Jellyfin.Plugin.MissingEpisodeAlert/obj/Debug/net8.0/Jellyfin.Plugin.MissingEpisodeAlert.AssemblyInfoInputs.cache
 /workspace/TrueBankai416_jellyfin/Jellyfin.Plugin.MissingEpisodeAlert/obj/Debug/net8.0/Jellyfin.Plugin.MissingEpisodeAlert.AssemblyInfo.cs
 /workspace/TrueBankai416_jellyfin/Jellyfin.Plugin.MissingEpisodeAlert/obj/Debug/net8.0/Jellyfin.Plugin.MissingEpisodeAlert.csproj.CoreCompileInputs.cache
 /workspace/TrueBankai416_jellyfin/Jellyfin.Plugin.MissingEpisodeAlert/obj/Debug/net8.0/Jellyfin.Plugin.MissingEpisodeAlert.sourcelink.json
-/workspace/TrueBankai416_jellyfin/Jellyfin.Plugin.MissingEpisodeAlert/bin/Debug/net8.0/Jellyfin.Plugin.MissingEpisodeAlert.deps.json
-/workspace/TrueBankai416_jellyfin/Jellyfin.Plugin.MissingEpisodeAlert/bin/Debug/net8.0/Jellyfin.Plugin.MissingEpisodeAlert.dll
-/workspace/TrueBankai416_jellyfin/Jellyfin.Plugin.MissingEpisodeAlert/bin/Debug/net8.0/Jellyfin.Plugin.MissingEpisodeAlert.pdb
-/workspace/TrueBankai416_jellyfin/Jellyfin.Plugin.MissingEpisodeAlert/bin/Debug/net8.0/Jellyfin.Plugin.MissingEpisodeAlert.xml
 /workspace/TrueBankai416_jellyfin/Jellyfin.Plugin.MissingEpisodeAlert/obj/Debug/net8.0/Jellyfin.Plugin.MissingEpisodeAlert.dll
 /workspace/TrueBankai416_jellyfin/Jellyfin.Plugin.MissingEpisodeAlert/obj/Debug/net8.0/refint/Jellyfin.Plugin.MissingEpisodeAlert.dll
 /workspace/TrueBankai416_jellyfin/Jellyfin.Plugin.MissingEpisodeAlert/obj/Debug/net8.0/Jellyfin.Plugin.MissingEpisodeAlert.xml

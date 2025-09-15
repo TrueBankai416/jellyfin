@@ -15,7 +15,6 @@ namespace Jellyfin.Plugin.MissingEpisodeAlert.Services;
 public class PlaybackMonitorService : IDisposable
 {
     private readonly ISessionManager _sessionManager;
-    private readonly ILibraryManager _libraryManager;
     private readonly MissingEpisodeDetectionService _detectionService;
     private readonly NotificationService _notificationService;
     private readonly ILogger<PlaybackMonitorService> _logger;
@@ -26,19 +25,16 @@ public class PlaybackMonitorService : IDisposable
     /// Initializes a new instance of the <see cref="PlaybackMonitorService"/> class.
     /// </summary>
     /// <param name="sessionManager">The session manager.</param>
-    /// <param name="libraryManager">The library manager.</param>
     /// <param name="detectionService">The missing episode detection service.</param>
     /// <param name="notificationService">The notification service.</param>
     /// <param name="logger">The logger.</param>
     public PlaybackMonitorService(
         ISessionManager sessionManager,
-        ILibraryManager libraryManager,
         MissingEpisodeDetectionService detectionService,
         NotificationService notificationService,
         ILogger<PlaybackMonitorService> logger)
     {
         _sessionManager = sessionManager;
-        _libraryManager = libraryManager;
         _detectionService = detectionService;
         _notificationService = notificationService;
         _logger = logger;

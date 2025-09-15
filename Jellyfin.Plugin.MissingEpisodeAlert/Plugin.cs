@@ -46,7 +46,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         {
             new PluginPageInfo
             {
-                Name = this.Name,
+                Name = "MissingEpisodeAlertConfigPage",
                 EmbeddedResourcePath = string.Format(CultureInfo.InvariantCulture, "{0}.Configuration.configPage.html", GetType().Namespace)
             }
         };
