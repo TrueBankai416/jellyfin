@@ -1,0 +1,21 @@
+[
+  {
+    "guid": "47E5A82C-2D97-4808-A5E3-F6B8B8B8B8B8",
+    "name": "Missing Episode Alert",
+    "description": "Alerts users when the next episode in a series is missing from the library and prevents auto-play.",
+    "overview": "Detects gaps in TV series episode sequences and shows popup notifications instead of auto-playing the next available episode. Prevents spoilers by stopping playback when episodes are missing from your library.",
+    "owner": "TrueBankai416",
+    "category": "General",
+    "imageUrl": "https://raw.githubusercontent.com/TrueBankai416/jellyfin/main/images/logo.png",
+    "versions": [
+      {
+        "version": "1.0.0.0",
+        "changelog": "Initial release with missing episode detection, popup notifications, and auto-play prevention.",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/TrueBankai416/jellyfin/releases/download/v1.0.0/Jellyfin.Plugin.MissingEpisodeAlert.dll",
+        "checksum": "d1a755d2f488323f1a6693a559f69fc7",
+        "timestamp": "2024-09-15T00:00:00Z"
+      }
+    ]
+  }
+]

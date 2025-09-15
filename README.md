@@ -9,6 +9,7 @@ A Jellyfin plugin that detects when the next episode in a TV series is missing f
 - **User Notifications**: Shows popup notifications when missing episodes are detected
 - **Configurable Settings**: Customize notification behavior and plugin functionality
 - **Smart Detection**: Only checks TV episodes and ignores movies (configurable)
+- **Cross-Season Support**: Detects missing episodes across season boundaries
 
 ## How It Works
 
@@ -29,9 +30,33 @@ When episode 4 finishes playing:
 - ✅ **With plugin**: Shows alert "Missing Episode: S01E05 is missing. Next available: S01E06" and stops auto-play
 - ❌ **Without plugin**: Automatically starts playing episode 6, potentially spoiling episode 5
 
-## Installation
+## Installation via Jellyfin Plugin Catalog
 
-1. Download the plugin DLL file
+### Method 1: Add Repository to Jellyfin (Recommended)
+
+1. **Open Jellyfin Dashboard**
+   - Go to `Dashboard` > `Plugins` > `Repositories`
+
+2. **Add Plugin Repository**
+   - Click `+` to add a new repository
+   - **Repository Name**: `Missing Episode Alert`
+   - **Repository URL**: `https://raw.githubusercontent.com/TrueBankai416/jellyfin/main/manifest.json`
+   - Click `Save`
+
+3. **Install Plugin**
+   - Go to `Dashboard` > `Plugins` > `Catalog`
+   - Find "Missing Episode Alert" in the list
+   - Click `Install`
+   - Restart Jellyfin server when prompted
+
+4. **Configure Plugin**
+   - Go to `Dashboard` > `Plugins` > `Missing Episode Alert`
+   - Configure your preferences
+   - Save settings
+
+### Method 2: Manual Installation
+
+1. Download the latest DLL from [Releases](https://github.com/TrueBankai416/jellyfin/releases)
 2. Place it in your Jellyfin plugins directory
 3. Restart Jellyfin server
 4. Configure the plugin in Dashboard > Plugins > Missing Episode Alert
@@ -55,11 +80,41 @@ When episode 4 finishes playing:
 
 1. Ensure you have .NET 8.0 SDK installed
 2. Clone this repository
-3. Build the project:
+3. Run the build script:
    ```bash
-   dotnet build Jellyfin.Plugin.MissingEpisodeAlert/Jellyfin.Plugin.MissingEpisodeAlert.csproj
+   chmod +x build-plugin.sh
+   ./build-plugin.sh
    ```
-4. The compiled DLL will be in the `bin` directory
+4. The compiled DLL will be in the `releases/v1.0.0/` directory
+
+## Development
+
+### Project Structure
+
+```
+Jellyfin.Plugin.MissingEpisodeAlert/
+├── Plugin.cs                                    # Main plugin class
+├── Configuration/
+│   ├── PluginConfiguration.cs                  # Settings model
+│   └── configPage.html                         # Admin UI
+├── Services/
+│   ├── MissingEpisodeDetectionService.cs       # Core detection logic
+│   ├── PlaybackMonitorService.cs               # Event monitoring
+│   └── NotificationService.cs                  # User notifications
+└── PluginServiceRegistrator.cs                 # Dependency injection
+```
+
+### Plugin Catalog Structure
+
+```
+├── manifest.json                               # Plugin catalog manifest
+├── images/
+│   └── logo.png                               # Plugin logo
+├── releases/
+│   └── v1.0.0/
+│       └── Jellyfin.Plugin.MissingEpisodeAlert.dll
+└── build-plugin.sh                           # Build script
+```
 
 ## Contributing
 
@@ -68,3 +123,22 @@ Contributions are welcome! Please feel free to submit issues, feature requests, 
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Support
+
+If you encounter any issues:
+
+1. Check the Jellyfin logs for error messages
+2. Verify your Jellyfin version is 10.9.x or later
+3. Ensure the plugin is enabled in the configuration
+4. Open an issue on GitHub with details about your setup
+
+## Changelog
+
+### v1.0.0 (2024-09-15)
+- Initial release
+- Missing episode detection for TV series
+- Popup notifications for missing episodes
+- Auto-play prevention
+- Configurable settings
+- Cross-season gap detection
