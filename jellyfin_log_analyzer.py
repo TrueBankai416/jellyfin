@@ -262,7 +262,7 @@ class JellyfinLogAnalyzer:
             details['media'] = item_match.group(1)
         
         # Extract FFmpeg command and analyze transcode reasons
-        if 'ffmpeg' in message.lower():
+        if 'ffmpeg' in message.lower() or 'ffmpeg' in entry.category.lower():
             details['ffmpeg_command'] = message
             details.update(self.analyze_ffmpeg_command(message))
         
