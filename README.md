@@ -127,8 +127,8 @@ python jellyfin_log_analyzer.py --all
 When `--output` is not specified, the script automatically generates filenames based on selected categories:
 - `--transcoding` → `jellyfin_log_transcoding.txt`
 - `--networking` → `jellyfin_log_networking.txt`
-- `--transcoding --playback` → `jellyfin_log_playback_transcoding.txt`
-- `--all` → `jellyfin_log_authentication_database_general_networking_playback_plugin_transcoding.txt`
+- `--transcoding --playback` → `jellyfin_log_playback_transcoding.txt` (alphabetically sorted)
+- `--all` → `jellyfin_log_all.txt`
 
 ### Information
 - `--list-logs`: List detected log files and exit

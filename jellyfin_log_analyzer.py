@@ -775,6 +775,11 @@ def generate_output_filename(categories: List[str]) -> str:
     if not categories:
         return 'jellyfin_errors.txt'
     
+    # Special case for all categories
+    all_categories = ['authentication', 'database', 'general', 'networking', 'playback', 'plugin', 'transcoding']
+    if sorted(categories) == all_categories:
+        return 'jellyfin_log_all.txt'
+    
     # Sort categories for consistent naming
     sorted_categories = sorted(categories)
     category_string = '_'.join(sorted_categories)
