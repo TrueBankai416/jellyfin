@@ -9,7 +9,7 @@ import json
 import re
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 from collections import defaultdict
@@ -173,31 +173,40 @@ class JellyfinLogAnalyzer:
         return any(keyword in message_lower for keyword in error_keywords)
     
     def parse_timestamp(self, entry: LogEntry) -> Optional[datetime]:
-        """Parse timestamp from log entry"""
+        """Parse timestamp from log entry and normalize to naive UTC"""
         if not entry.timestamp:
             return None
         
-        # Try parsing JSON format timestamp (@t field)
-        if 'T' in entry.timestamp and ('Z' in entry.timestamp or '+' in entry.timestamp):
-            try:
-                # Handle ISO format with timezone and normalize fractional seconds
-                timestamp_str = entry.timestamp.replace('Z', '+00:00')
-                
-                # Handle fractional seconds with more than 6 digits (Python limitation)
-                if '.' in timestamp_str:
-                    main_part, sep, offset_part = timestamp_str.partition('+')
-                    if '.' in main_part:
-                        date_part, dot, frac_part = main_part.partition('.')
+        # Try parsing JSON format timestamp (@t field) - handles both positive and negative offsets
+        if 'T' in entry.timestamp:
+            # Use regex to properly handle both positive and negative timezone offsets
+            iso_match = re.match(r'^(?P<dt>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?)(?P<tz>Z|[+-]\d{2}:\d{2})$', entry.timestamp)
+            if iso_match:
+                try:
+                    dt_part = iso_match.group('dt')
+                    tz_part = iso_match.group('tz')
+                    
+                    # Handle fractional seconds with more than 6 digits (Python limitation)
+                    if '.' in dt_part:
+                        date_part, dot, frac_part = dt_part.partition('.')
                         # Keep only digits and truncate to 6 digits max
                         frac_digits = re.sub(r'[^0-9].*$', '', frac_part)[:6]
-                        main_part = f"{date_part}.{frac_digits}"
-                    timestamp_str = main_part + (sep + offset_part if sep else '')
-                
-                return datetime.fromisoformat(timestamp_str)
-            except ValueError:
-                pass
+                        dt_part = f"{date_part}.{frac_digits}"
+                    
+                    # Normalize Z to +00:00
+                    if tz_part == 'Z':
+                        tz_part = '+00:00'
+                    
+                    # Reconstruct and parse
+                    timestamp_str = dt_part + tz_part
+                    parsed_dt = datetime.fromisoformat(timestamp_str)
+                    
+                    # Convert to naive UTC to avoid aware/naive mixing issues
+                    return parsed_dt.astimezone(timezone.utc).replace(tzinfo=None)
+                except ValueError:
+                    pass
         
-        # Try parsing standard log format timestamps
+        # Try parsing standard log format timestamps (treat as naive UTC)
         timestamp_patterns = [
             r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})',  # 2024-01-15 14:25:10.123
             r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})',         # 2024-01-15 14:25:10
@@ -326,9 +335,13 @@ def detect_environment() -> str:
     if os.path.exists('/.dockerenv'):
         return 'docker'
     
-    # Check for Docker-specific environment variables
-    if any(var in os.environ for var in ['JELLYFIN_DATA_DIR', 'JELLYFIN_CONFIG_DIR', 'JELLYFIN_LOG_DIR']):
-        return 'docker'
+    # Check /proc/1/cgroup for Docker (lightweight check)
+    try:
+        with open('/proc/1/cgroup', 'r') as f:
+            if 'docker' in f.read():
+                return 'docker'
+    except (OSError, IOError):
+        pass
     
     # Check if running as Windows service
     if os.name == 'nt':
