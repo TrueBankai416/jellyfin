@@ -14,7 +14,7 @@ A comprehensive script to analyze Jellyfin logs and extract different types of e
 ## Supported Error Types
 
 - **Networking**: Connection timeouts, DNS issues, network failures, SSL problems
-- **Transcoding**: FFmpeg errors, codec issues, hardware acceleration problems
+- **Transcoding**: FFmpeg errors, codec issues, hardware acceleration problems, plus detailed transcoding analysis with play methods, users, clients, and transcode reasons
 - **Playback**: Stream failures, format issues, seeking problems, buffer issues
 - **Authentication**: Login failures, token issues, authorization problems
 - **Database**: SQLite errors, corruption, migration issues

@@ -37,6 +37,7 @@ class ErrorPattern:
     ]
     
     TRANSCODING = [
+        # Error patterns
         r"transcode.*(?:failed|error|exception)",
         r"ffmpeg.*(?:error|failed|exception|exited.*code\s*\d+)",
         r"hardware.*acceleration.*(?:failed|unavailable|error)",
@@ -44,6 +45,14 @@ class ErrorPattern:
         r"video.*(?:encoding|decoding).*(?:failed|error)",
         r"audio.*(?:encoding|decoding).*(?:failed|error)",
         r"subtitle.*(?:encoding|extraction).*(?:failed|error)",
+        # Transcoding event patterns (not errors, but transcoding activity)
+        r"play_method.*=.*transcode",
+        r"ffmpeg.*-i\s+file:",
+        r"started.*transcod",
+        r"transcod.*start",
+        r"h264_nvenc|libx264|hevc_nvenc|libx265",  # Video encoders
+        r"libfdk_aac|aac|ac3|eac3",  # Audio encoders
+        r"scale_cuda|scale=|vf.*scale",  # Video scaling
     ]
     
     PLAYBACK = [
@@ -149,6 +158,28 @@ class JellyfinLogAnalyzer:
                 raw_line=line
             )
         
+        # Special case for FFmpeg command lines: [timestamp] [level] "ffmpeg command..."
+        match = re.match(r'\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)', line)
+        if match:
+            timestamp, level, message = match.groups()
+            # Check if this looks like an FFmpeg command
+            if 'ffmpeg' in message.lower():
+                return LogEntry(
+                    timestamp=timestamp,
+                    level=level.strip(),
+                    message=message.strip(),
+                    category="FFmpeg",
+                    raw_line=line
+                )
+            else:
+                return LogEntry(
+                    timestamp=timestamp,
+                    level=level.strip(),
+                    message=message.strip(),
+                    category="",
+                    raw_line=line
+                )
+        
         # Fallback: treat entire line as message
         return LogEntry(
             timestamp='',
@@ -178,6 +209,110 @@ class JellyfinLogAnalyzer:
         error_keywords = ['error', 'exception', 'failed', 'failure', 'critical', 'fatal']
         message_lower = entry.message.lower()
         return any(keyword in message_lower for keyword in error_keywords)
+    
+    def is_transcoding_event(self, entry: LogEntry) -> bool:
+        """Check if a log entry represents a transcoding event (not necessarily an error)"""
+        if not entry:
+            return False
+        
+        # Check for transcoding-specific patterns
+        transcoding_patterns = [
+            r"play_method.*=.*transcode",
+            r"ffmpeg.*-i\s+file:",
+            r"started.*transcod",
+            r"transcod.*start",
+            r"h264_nvenc|libx264|hevc_nvenc|libx265",  # Video encoders
+            r"libfdk_aac|aac|ac3|eac3",  # Audio encoders
+            r"scale_cuda|scale=|vf.*scale",  # Video scaling
+        ]
+        
+        full_text = f"{entry.message} {entry.category}".lower()
+        return any(re.search(pattern, full_text, re.IGNORECASE) for pattern in transcoding_patterns)
+    
+    def extract_transcoding_details(self, entry: LogEntry) -> Dict[str, str]:
+        """Extract detailed transcoding information from log entry"""
+        details = {}
+        message = entry.message
+        
+        # Extract play method
+        play_method_match = re.search(r'play_method\s*=\s*"([^"]+)"', message)
+        if play_method_match:
+            details['play_method'] = play_method_match.group(1)
+        
+        # Extract user information
+        user_match = re.search(r'User "([^"]+)"', message)
+        if user_match:
+            details['user'] = user_match.group(1)
+        
+        # Extract client information
+        client_match = re.search(r'e\.ClientName\s*=\s*"([^"]+)"', message)
+        if client_match:
+            details['client'] = client_match.group(1)
+        
+        # Extract device information
+        device_match = re.search(r'e\.DeviceName\s*=\s*"([^"]+)"', message)
+        if device_match:
+            details['device'] = device_match.group(1)
+        
+        # Extract media information
+        item_match = re.search(r'ItemName\s*=\s*"([^"]+)"', message)
+        if item_match:
+            details['media'] = item_match.group(1)
+        
+        # Extract FFmpeg command and analyze transcode reasons
+        if 'ffmpeg' in message.lower():
+            details['ffmpeg_command'] = message
+            details.update(self.analyze_ffmpeg_command(message))
+        
+        return details
+    
+    def analyze_ffmpeg_command(self, ffmpeg_cmd: str) -> Dict[str, str]:
+        """Analyze FFmpeg command to determine transcode reasons"""
+        reasons = {}
+        
+        # Video scaling detection
+        scale_match = re.search(r'scale(?:_cuda)?=w=(\d+):h=(\d+)', ffmpeg_cmd)
+        if scale_match:
+            width, height = scale_match.groups()
+            reasons['video_scaling'] = f"Scaling to {width}x{height}"
+        
+        # Video codec conversion
+        if 'h264_nvenc' in ffmpeg_cmd:
+            reasons['video_codec'] = "Converting to H.264 (NVENC)"
+        elif 'libx264' in ffmpeg_cmd:
+            reasons['video_codec'] = "Converting to H.264 (Software)"
+        elif 'hevc_nvenc' in ffmpeg_cmd:
+            reasons['video_codec'] = "Converting to H.265/HEVC (NVENC)"
+        elif 'libx265' in ffmpeg_cmd:
+            reasons['video_codec'] = "Converting to H.265/HEVC (Software)"
+        
+        # Audio codec conversion
+        if 'libfdk_aac' in ffmpeg_cmd:
+            reasons['audio_codec'] = "Converting to AAC (FDK)"
+        elif 'aac' in ffmpeg_cmd:
+            reasons['audio_codec'] = "Converting to AAC"
+        elif 'ac3' in ffmpeg_cmd:
+            reasons['audio_codec'] = "Converting to AC3"
+        
+        # Audio channel conversion
+        ac_match = re.search(r'-ac (\d+)', ffmpeg_cmd)
+        if ac_match:
+            channels = ac_match.group(1)
+            reasons['audio_channels'] = f"Converting to {channels} channels"
+        
+        # Bitrate limiting
+        bitrate_match = re.search(r'-b:v (\d+)', ffmpeg_cmd)
+        if bitrate_match:
+            bitrate = int(bitrate_match.group(1)) // 1000  # Convert to kbps
+            reasons['video_bitrate'] = f"Limiting bitrate to {bitrate} kbps"
+        
+        # Hardware acceleration
+        if 'hwaccel cuda' in ffmpeg_cmd:
+            reasons['hardware_accel'] = "Using CUDA hardware acceleration"
+        elif 'hwaccel' in ffmpeg_cmd:
+            reasons['hardware_accel'] = "Using hardware acceleration"
+        
+        return reasons
     
     def parse_timestamp(self, entry: LogEntry) -> Optional[datetime]:
         """Parse timestamp from log entry and normalize to naive UTC"""
@@ -277,17 +412,33 @@ class JellyfinLogAnalyzer:
                     for line_num, line in enumerate(f, 1):
                         entry = self.parse_log_line(line)
                         
-                        if entry and self.is_error_line(entry):
-                            error_categories = self.categorize_error(entry, categories)
+                        if entry:
+                            # Check for regular errors
+                            if self.is_error_line(entry):
+                                error_categories = self.categorize_error(entry, categories)
+                                
+                                for category in error_categories:
+                                    error_info = {
+                                        'entry': entry,
+                                        'file': log_path,
+                                        'line_number': line_num,
+                                        'timestamp': self.parse_timestamp(entry),
+                                        'event_type': 'error'
+                                    }
+                                    all_errors[category].append(error_info)
                             
-                            for category in error_categories:
+                            # Special handling for transcoding events (if transcoding category is selected)
+                            elif 'transcoding' in categories and self.is_transcoding_event(entry):
+                                transcoding_details = self.extract_transcoding_details(entry)
                                 error_info = {
                                     'entry': entry,
                                     'file': log_path,
                                     'line_number': line_num,
-                                    'timestamp': self.parse_timestamp(entry)
+                                    'timestamp': self.parse_timestamp(entry),
+                                    'event_type': 'transcoding_event',
+                                    'transcoding_details': transcoding_details
                                 }
-                                all_errors[category].append(error_info)
+                                all_errors['transcoding'].append(error_info)
             
             except Exception as e:
                 print(f"Error reading {log_path}: {e}")
@@ -322,18 +473,63 @@ class JellyfinLogAnalyzer:
                     
                     for i, error_info in enumerate(errors, 1):
                         entry = error_info['entry']
-                        f.write(f"\nError #{i}:\n")
+                        event_type = error_info.get('event_type', 'error')
+                        
+                        if event_type == 'transcoding_event':
+                            f.write(f"\nTranscoding Event #{i}:\n")
+                        else:
+                            f.write(f"\nError #{i}:\n")
+                        
                         f.write(f"File: {error_info['file']}\n")
                         f.write(f"Line: {error_info['line_number']}\n")
                         f.write(f"Timestamp: {entry.timestamp}\n")
                         f.write(f"Level: {entry.level}\n")
                         f.write(f"Category: {entry.category}\n")
+                        
+                        # Enhanced transcoding information
+                        if event_type == 'transcoding_event' and 'transcoding_details' in error_info:
+                            details = error_info['transcoding_details']
+                            
+                            if details.get('play_method'):
+                                f.write(f"Play Method: {details['play_method']}\n")
+                            if details.get('user'):
+                                f.write(f"User: {details['user']}\n")
+                            if details.get('client'):
+                                f.write(f"Client: {details['client']}\n")
+                            if details.get('device'):
+                                f.write(f"Device: {details['device']}\n")
+                            if details.get('media'):
+                                f.write(f"Media: {details['media']}\n")
+                            
+                            # Transcode reasons
+                            reasons = []
+                            if details.get('video_scaling'):
+                                reasons.append(details['video_scaling'])
+                            if details.get('video_codec'):
+                                reasons.append(details['video_codec'])
+                            if details.get('audio_codec'):
+                                reasons.append(details['audio_codec'])
+                            if details.get('audio_channels'):
+                                reasons.append(details['audio_channels'])
+                            if details.get('video_bitrate'):
+                                reasons.append(details['video_bitrate'])
+                            if details.get('hardware_accel'):
+                                reasons.append(details['hardware_accel'])
+                            
+                            if reasons:
+                                f.write(f"Transcode Reasons: {'; '.join(reasons)}\n")
+                        
                         f.write(f"Message: {entry.message}\n")
                         
                         if entry.exception:
                             f.write(f"Exception: {entry.exception}\n")
                         
-                        f.write(f"Raw line: {entry.raw_line}\n")
+                        # For transcoding events, don't show the full FFmpeg command in raw line (too long)
+                        if event_type == 'transcoding_event' and 'ffmpeg' in entry.raw_line.lower():
+                            f.write(f"Raw line: [FFmpeg command - see message above]\n")
+                        else:
+                            f.write(f"Raw line: {entry.raw_line}\n")
+                        
                         f.write("-" * 50 + "\n")
             
             print(f"Report saved to: {output_file}")
@@ -438,9 +634,9 @@ def find_jellyfin_logs(verbose: bool = False) -> List[str]:
     
     elif environment == 'linux_service':
         linux_service_paths = [
-            "/var/log/jellyfin/",
+            "/var/log/jellyfin/",          # Current logs - check first
             "/var/lib/jellyfin/log/",
-            "/etc/jellyfin/log/",
+            "/etc/jellyfin/log/",          # Legacy/old logs - check last
         ]
         for path in linux_service_paths:
             if os.path.exists(path):
@@ -758,11 +954,27 @@ Environment Variables (optional):
     analyzer.generate_report(args.output)
     
     # Print summary
-    total_errors = sum(len(errors) for errors in analyzer.found_errors.values())
+    total_items = sum(len(errors) for errors in analyzer.found_errors.values())
     print(f"\nSummary:")
-    print(f"Total errors found: {total_errors}")
-    for category, errors in analyzer.found_errors.items():
-        print(f"  {category}: {len(errors)} errors")
+    
+    # Count errors vs transcoding events
+    total_errors = 0
+    total_transcoding_events = 0
+    
+    for category, items in analyzer.found_errors.items():
+        error_count = sum(1 for item in items if item.get('event_type', 'error') == 'error')
+        transcoding_count = sum(1 for item in items if item.get('event_type', 'error') == 'transcoding_event')
+        
+        total_errors += error_count
+        total_transcoding_events += transcoding_count
+        
+        if category == 'transcoding' and transcoding_count > 0:
+            print(f"  {category}: {error_count} errors, {transcoding_count} transcoding events")
+        else:
+            print(f"  {category}: {len(items)} errors")
+    
+    if total_transcoding_events > 0:
+        print(f"Total: {total_errors} errors, {total_transcoding_events} transcoding events")
     
     if total_errors > 0:
         print(f"\nDetailed report saved to: {args.output}")
