@@ -55,6 +55,15 @@ class ErrorPattern:
         r"scale_cuda|scale=|vf.*scale",  # Video scaling
     ]
     
+    DIRECTSTREAM = [
+        # DirectStream event patterns (remuxing/container changes)
+        r"play_method.*=.*directstream",
+        r"directstream.*start",
+        r"started.*directstream",
+        r"remux.*start",
+        r"started.*remux",
+    ]
+    
     PLAYBACK = [
         r"playback.*(?:failed|error|stopped)",
         r"stream.*(?:failed|error|unavailable|corrupted)",
@@ -105,6 +114,7 @@ class JellyfinLogAnalyzer:
         self.error_patterns = {
             'networking': ErrorPattern.NETWORKING,
             'transcoding': ErrorPattern.TRANSCODING,
+            'directstream': ErrorPattern.DIRECTSTREAM,
             'playback': ErrorPattern.PLAYBACK,
             'authentication': ErrorPattern.AUTHENTICATION,
             'database': ErrorPattern.DATABASE,
@@ -235,6 +245,28 @@ class JellyfinLogAnalyzer:
             return False
         
         return any(re.search(pattern, full_text, re.IGNORECASE) for pattern in transcoding_patterns)
+    
+    def is_directstream_event(self, entry: LogEntry) -> bool:
+        """Check if a log entry represents a DirectStream event (remuxing/container changes)"""
+        if not entry:
+            return False
+        
+        # Check for DirectStream-specific patterns
+        directstream_patterns = [
+            r"(?:PlayMethod|Play\s*method|play_method)\s*[:=].*directstream",  # DirectStream play method
+            r"directstream.*start",
+            r"started.*directstream",
+            r"remux.*start",
+            r"started.*remux",
+        ]
+        
+        full_text = f"{entry.message} {entry.category}".lower()
+        
+        # Exclude ffprobe commands (media analysis, not DirectStream)
+        if 'ffprobe' in full_text:
+            return False
+        
+        return any(re.search(pattern, full_text, re.IGNORECASE) for pattern in directstream_patterns)
     
     def extract_transcoding_details(self, entry: LogEntry) -> Dict[str, str]:
         """Extract detailed transcoding information from log entry"""
@@ -459,6 +491,19 @@ class JellyfinLogAnalyzer:
                                     'transcoding_details': transcoding_details
                                 }
                                 all_errors['transcoding'].append(error_info)
+                            
+                            # Special handling for DirectStream events (if directstream category is selected)
+                            elif 'directstream' in categories and self.is_directstream_event(entry):
+                                directstream_details = self.extract_transcoding_details(entry)  # Reuse same extraction logic
+                                error_info = {
+                                    'entry': entry,
+                                    'file': log_path,
+                                    'line_number': line_num,
+                                    'timestamp': self.parse_timestamp(entry),
+                                    'event_type': 'directstream_event',
+                                    'directstream_details': directstream_details
+                                }
+                                all_errors['directstream'].append(error_info)
             
             except Exception as e:
                 print(f"Error reading {log_path}: {e}")
@@ -486,6 +531,8 @@ class JellyfinLogAnalyzer:
                 for category, errors in self.found_errors.items():
                     if category == 'transcoding':
                         f.write(f"\n{category.upper()}\n")  # Just "TRANSCODING" not "TRANSCODING ERRORS"
+                    elif category == 'directstream':
+                        f.write(f"\nDIRECT STREAM\n")  # Just "DIRECT STREAM" not "DIRECT STREAM ERRORS"
                     else:
                         f.write(f"\n{category.upper()} ERRORS\n")
                     f.write("-" * 30 + "\n")
@@ -500,6 +547,8 @@ class JellyfinLogAnalyzer:
                         
                         if event_type == 'transcoding_event':
                             f.write(f"\nTranscoding Event #{i}:\n")
+                        elif event_type == 'directstream_event':
+                            f.write(f"\nDirectStream Event #{i}:\n")
                         else:
                             f.write(f"\nError #{i}:\n")
                         
@@ -541,6 +590,39 @@ class JellyfinLogAnalyzer:
                             
                             if reasons:
                                 f.write(f"Transcode Reasons: {'; '.join(reasons)}\n")
+                        
+                        # Enhanced DirectStream information
+                        elif event_type == 'directstream_event' and 'directstream_details' in error_info:
+                            details = error_info['directstream_details']
+                            
+                            if details.get('play_method'):
+                                f.write(f"Play Method: {details['play_method']}\n")
+                            if details.get('user'):
+                                f.write(f"User: {details['user']}\n")
+                            if details.get('client'):
+                                f.write(f"Client: {details['client']}\n")
+                            if details.get('device'):
+                                f.write(f"Device: {details['device']}\n")
+                            if details.get('media'):
+                                f.write(f"Media: {details['media']}\n")
+                            
+                            # DirectStream reasons (if any - usually just container/format changes)
+                            reasons = []
+                            if details.get('video_scaling'):
+                                reasons.append(details['video_scaling'])
+                            if details.get('video_codec'):
+                                reasons.append(details['video_codec'])
+                            if details.get('audio_codec'):
+                                reasons.append(details['audio_codec'])
+                            if details.get('audio_channels'):
+                                reasons.append(details['audio_channels'])
+                            if details.get('video_bitrate'):
+                                reasons.append(details['video_bitrate'])
+                            if details.get('hardware_accel'):
+                                reasons.append(details['hardware_accel'])
+                            
+                            if reasons:
+                                f.write(f"DirectStream Reasons: {'; '.join(reasons)}\n")
                         
                         f.write(f"Message: {entry.message}\n")
                         
@@ -783,7 +865,7 @@ def generate_output_filename(categories: List[str]) -> str:
         return 'jellyfin_errors.txt'
     
     # Special case for all categories
-    all_categories = ['authentication', 'database', 'general', 'networking', 'playback', 'plugin', 'transcoding']
+    all_categories = ['authentication', 'database', 'directstream', 'general', 'networking', 'playback', 'plugin', 'transcoding']
     if sorted(categories) == all_categories:
         return 'jellyfin_log_all.txt'
     
@@ -864,6 +946,8 @@ Environment Variables (optional):
                        help='Scan for networking errors')
     parser.add_argument('--transcoding', action='store_true',
                        help='Scan for transcoding errors')
+    parser.add_argument('--directstream', action='store_true',
+                       help='Scan for DirectStream events (remuxing/container changes)')
     parser.add_argument('--playback', action='store_true',
                        help='Scan for playback errors')
     parser.add_argument('--authentication', action='store_true',
@@ -935,13 +1019,15 @@ Environment Variables (optional):
     # Determine which categories to scan
     categories = []
     if args.all:
-        categories = ['networking', 'transcoding', 'playback', 'authentication', 
+        categories = ['networking', 'transcoding', 'directstream', 'playback', 'authentication', 
                      'database', 'plugin', 'general']
     else:
         if args.networking:
             categories.append('networking')
         if args.transcoding:
             categories.append('transcoding')
+        if args.directstream:
+            categories.append('directstream')
         if args.playback:
             categories.append('playback')
         if args.authentication:
@@ -1006,29 +1092,40 @@ Environment Variables (optional):
     total_items = sum(len(errors) for errors in analyzer.found_errors.values())
     print(f"\nSummary:")
     
-    # Count errors vs transcoding events
+    # Count errors vs transcoding events vs directstream events
     total_errors = 0
     total_transcoding_events = 0
+    total_directstream_events = 0
     
     for category, items in analyzer.found_errors.items():
         error_count = sum(1 for item in items if item.get('event_type', 'error') == 'error')
         transcoding_count = sum(1 for item in items if item.get('event_type', 'error') == 'transcoding_event')
+        directstream_count = sum(1 for item in items if item.get('event_type', 'error') == 'directstream_event')
         
         total_errors += error_count
         total_transcoding_events += transcoding_count
+        total_directstream_events += directstream_count
         
         if category == 'transcoding' and transcoding_count > 0:
             print(f"  {category}: {error_count} errors, {transcoding_count} transcoding events")
+        elif category == 'directstream' and directstream_count > 0:
+            print(f"  {category}: {error_count} errors, {directstream_count} DirectStream events")
         else:
             print(f"  {category}: {len(items)} errors")
     
-    if total_transcoding_events > 0:
-        print(f"Total: {total_errors} errors, {total_transcoding_events} transcoding events")
+    # Show totals if there are any events
+    if total_transcoding_events > 0 or total_directstream_events > 0:
+        total_parts = [f"{total_errors} errors"]
+        if total_transcoding_events > 0:
+            total_parts.append(f"{total_transcoding_events} transcoding events")
+        if total_directstream_events > 0:
+            total_parts.append(f"{total_directstream_events} DirectStream events")
+        print(f"Total: {', '.join(total_parts)}")
     
-    if total_errors > 0 or total_transcoding_events > 0:
+    if total_errors > 0 or total_transcoding_events > 0 or total_directstream_events > 0:
         print(f"\nDetailed report saved to: {output_file}")
     else:
-        print("\nNo errors or transcoding events found matching the specified criteria.")
+        print("\nNo errors, transcoding events, or DirectStream events found matching the specified criteria.")
 
 if __name__ == "__main__":
     main()
