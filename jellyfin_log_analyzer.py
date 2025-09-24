@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
-from collections import defaultdict
+from collections import defaultdict, deque
 
 @dataclass
 class LogEntry:
@@ -126,7 +126,19 @@ class JellyfinLogAnalyzer:
             except json.JSONDecodeError:
                 pass
         
-        # Try to parse standard format: [timestamp] [level] category: message
+        # Try to parse standard format: [timestamp] [level] [category] message
+        match = re.match(r'\[([^\]]+)\]\s*\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)', line)
+        if match:
+            timestamp, level, category, message = match.groups()
+            return LogEntry(
+                timestamp=timestamp,
+                level=level.strip(),
+                message=message.strip(),
+                category=category.strip(),
+                raw_line=line
+            )
+        
+        # Try to parse format: [timestamp] [level] category: message
         match = re.match(r'\[([^\]]+)\]\s*\[([^\]]+)\]\s*([^:]*?):\s*(.*)', line)
         if match:
             timestamp, level, category, message = match.groups()
@@ -151,8 +163,9 @@ class JellyfinLogAnalyzer:
         if not entry:
             return False
         
-        # Check log level
-        if entry.level.upper() in ['ERROR', 'FATAL', 'CRITICAL']:
+        # Check log level - include Jellyfin's abbreviated levels
+        error_levels = ['ERROR', 'ERR', 'FATAL', 'FTL', 'CRITICAL']
+        if entry.level.upper() in error_levels:
             return True
         
         # Check for error keywords in message
@@ -160,6 +173,45 @@ class JellyfinLogAnalyzer:
         message_lower = entry.message.lower()
         return any(keyword in message_lower for keyword in error_keywords)
     
+    def parse_timestamp(self, entry: LogEntry) -> Optional[datetime]:
+        """Parse timestamp from log entry"""
+        if not entry.timestamp:
+            return None
+        
+        # Try parsing JSON format timestamp (@t field)
+        if 'T' in entry.timestamp and ('Z' in entry.timestamp or '+' in entry.timestamp):
+            try:
+                # Handle ISO format with timezone
+                timestamp_str = entry.timestamp.replace('Z', '+00:00')
+                if '+' not in timestamp_str[-6:]:
+                    timestamp_str += '+00:00'
+                return datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            except ValueError:
+                pass
+        
+        # Try parsing standard log format timestamps
+        timestamp_patterns = [
+            r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})',  # 2024-01-15 14:25:10.123
+            r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})',         # 2024-01-15 14:25:10
+            r'(\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2})',         # 01/15/2024 14:25:10
+        ]
+        
+        for pattern in timestamp_patterns:
+            match = re.search(pattern, entry.timestamp)
+            if match:
+                timestamp_str = match.group(1)
+                try:
+                    if '.' in timestamp_str:
+                        return datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S.%f')
+                    elif '-' in timestamp_str:
+                        return datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
+                    elif '/' in timestamp_str:
+                        return datetime.strptime(timestamp_str, '%m/%d/%Y %H:%M:%S')
+                except ValueError:
+                    continue
+        
+        return None
+
     def categorize_error(self, entry: LogEntry, selected_categories: List[str]) -> List[str]:
         """Categorize an error entry based on patterns"""
         categories = []
@@ -173,18 +225,27 @@ class JellyfinLogAnalyzer:
                         categories.append(category)
                         break
         
+        # If no specific category matches but 'general' is selected, add to general
+        if not categories and 'general' in selected_categories:
+            categories.append('general')
+        
         return categories
     
-    def analyze_logs(self, categories: List[str], max_errors_per_category: int = 2):
+    def analyze_logs(self, categories: List[str], max_errors_per_category: int = 2, verbose: bool = False):
         """Analyze log files and extract errors"""
-        print(f"Analyzing logs for categories: {', '.join(categories)}")
+        if verbose:
+            print(f"Analyzing logs for categories: {', '.join(categories)}")
+        
+        # Collect all errors first, then sort by timestamp to get the latest ones
+        all_errors = defaultdict(list)
         
         for log_path in self.log_paths:
             if not os.path.exists(log_path):
                 print(f"Warning: Log file not found: {log_path}")
                 continue
             
-            print(f"Processing: {log_path}")
+            if verbose:
+                print(f"Processing: {log_path}")
             
             try:
                 with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -195,15 +256,23 @@ class JellyfinLogAnalyzer:
                             error_categories = self.categorize_error(entry, categories)
                             
                             for category in error_categories:
-                                if len(self.found_errors[category]) < max_errors_per_category:
-                                    self.found_errors[category].append({
-                                        'entry': entry,
-                                        'file': log_path,
-                                        'line_number': line_num
-                                    })
+                                error_info = {
+                                    'entry': entry,
+                                    'file': log_path,
+                                    'line_number': line_num,
+                                    'timestamp': self.parse_timestamp(entry)
+                                }
+                                all_errors[category].append(error_info)
             
             except Exception as e:
                 print(f"Error reading {log_path}: {e}")
+        
+        # Sort errors by timestamp and keep only the latest N per category
+        for category, errors in all_errors.items():
+            # Sort by timestamp (newest first), with None timestamps at the end
+            errors.sort(key=lambda x: x['timestamp'] or datetime.min, reverse=True)
+            # Keep only the latest max_errors_per_category
+            self.found_errors[category] = errors[:max_errors_per_category]
     
     def generate_report(self, output_file: str):
         """Generate a formatted report of found errors"""
@@ -266,25 +335,35 @@ def detect_environment() -> str:
     
     return 'native'
 
-def find_jellyfin_logs() -> List[str]:
+def find_jellyfin_logs(verbose: bool = False) -> List[str]:
     """Dynamically find Jellyfin log files based on environment and common locations"""
     log_files = []
     environment = detect_environment()
     
-    print(f"Detected environment: {environment}")
+    if verbose:
+        print(f"Detected environment: {environment}")
     
     # Check environment variables first
-    env_log_paths = [
-        os.environ.get('JELLYFIN_LOG_DIR'),
-        os.environ.get('JELLYFIN_DATA_DIR'),
-        os.environ.get('JELLYFIN_CONFIG_DIR'),
-    ]
+    jellyfin_log_dir = os.environ.get('JELLYFIN_LOG_DIR')
+    jellyfin_data_dir = os.environ.get('JELLYFIN_DATA_DIR')
+    jellyfin_config_dir = os.environ.get('JELLYFIN_CONFIG_DIR')
     
-    for env_path in env_log_paths:
-        if env_path:
-            log_path = os.path.join(env_path, 'log') if not env_path.endswith('log') else env_path
-            if os.path.exists(log_path):
-                log_files.extend(_scan_directory_for_logs(log_path))
+    # JELLYFIN_LOG_DIR should be used as-is (it's already the log directory)
+    if jellyfin_log_dir:
+        expanded_path = os.path.expanduser(os.path.expandvars(jellyfin_log_dir))
+        if os.path.exists(expanded_path):
+            log_files.extend(_scan_directory_for_logs(expanded_path))
+    
+    # For DATA_DIR and CONFIG_DIR, check if they have a 'log' subdirectory
+    if jellyfin_data_dir:
+        log_path = os.path.join(os.path.expanduser(os.path.expandvars(jellyfin_data_dir)), 'log')
+        if os.path.exists(log_path):
+            log_files.extend(_scan_directory_for_logs(log_path))
+    
+    if jellyfin_config_dir:
+        log_path = os.path.join(os.path.expanduser(os.path.expandvars(jellyfin_config_dir)), 'log')
+        if os.path.exists(log_path):
+            log_files.extend(_scan_directory_for_logs(log_path))
     
     # Environment-specific paths
     if environment == 'docker':
@@ -419,6 +498,37 @@ def _is_log_file(filename: str) -> bool:
     
     return False
 
+def get_interactive_log_path() -> Optional[str]:
+    """Interactively ask user for log path when auto-detection fails"""
+    try:
+        print("\nNo log files detected automatically.")
+        print("Common Jellyfin log locations:")
+        print("  Linux:   /var/log/jellyfin/")
+        print("  Windows: %PROGRAMDATA%\\Jellyfin\\Server\\log\\")
+        print("  Docker:  /config/log/")
+        print()
+        
+        path = input("Please enter the path to your Jellyfin log directory (or press Enter to exit): ").strip()
+        
+        if not path:
+            return None
+        
+        # Expand environment variables and user home
+        expanded_path = os.path.expanduser(os.path.expandvars(path))
+        
+        if not os.path.exists(expanded_path):
+            print(f"Warning: Path does not exist: {expanded_path}")
+            retry = input("Would you like to try again? (y/N): ").strip().lower()
+            if retry in ['y', 'yes']:
+                return get_interactive_log_path()
+            return None
+        
+        return expanded_path
+        
+    except (KeyboardInterrupt, EOFError):
+        print("\nOperation cancelled by user.")
+        return None
+
 def main():
     parser = argparse.ArgumentParser(
         description="""
@@ -445,6 +555,8 @@ Examples:
   %(prog)s --transcoding --max-errors 5             # Get more errors per type
   %(prog)s --list-logs                              # Show detected log files
   %(prog)s --environment                            # Show detected environment
+  %(prog)s --interactive --transcoding              # Interactive path input
+  %(prog)s --no-auto-detect --log-path /logs/       # Disable auto-detection
 
 Environment Variables (optional):
   JELLYFIN_LOG_DIR     - Custom log directory
@@ -478,6 +590,8 @@ Environment Variables (optional):
                        help='Output file for error report (default: jellyfin_errors.txt)')
     parser.add_argument('--max-errors', type=int, default=2,
                        help='Maximum errors per category (default: 2)')
+    parser.add_argument('--no-auto-detect', action='store_true',
+                       help='Disable automatic log detection, use only specified --log-path')
     
     # Information options
     parser.add_argument('--list-logs', action='store_true',
@@ -486,6 +600,8 @@ Environment Variables (optional):
                        help='Show detected environment information and exit')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose output')
+    parser.add_argument('--interactive', action='store_true',
+                       help='Enable interactive mode for path input when auto-detection fails')
     
     args = parser.parse_args()
     
@@ -507,7 +623,7 @@ Environment Variables (optional):
         sys.exit(0)
     
     if args.list_logs:
-        log_paths = find_jellyfin_logs()
+        log_paths = find_jellyfin_logs(verbose=True)
         if log_paths:
             print("Detected log files:")
             for i, log_path in enumerate(log_paths, 1):
@@ -548,14 +664,33 @@ Environment Variables (optional):
         sys.exit(1)
     
     # Determine log file paths
-    log_paths = args.log_path if args.log_path else find_jellyfin_logs()
+    if args.no_auto_detect:
+        # Use only specified paths, no auto-detection
+        log_paths = args.log_path or []
+    else:
+        # Use specified paths if provided, otherwise auto-detect
+        log_paths = args.log_path if args.log_path else find_jellyfin_logs(args.verbose)
     
+    # If no log paths found and interactive mode is enabled or no paths specified
     if not log_paths:
-        print("Error: No log files found.")
-        print("Use --log-path to specify log file locations, or try:")
-        print("  --list-logs     to see what the script is looking for")
-        print("  --environment   to see detected environment info")
-        sys.exit(1)
+        if args.interactive or (not args.log_path and not args.no_auto_detect):
+            interactive_path = get_interactive_log_path()
+            if interactive_path:
+                # Scan the interactive path for log files
+                log_files = _scan_directory_for_logs(interactive_path)
+                if log_files:
+                    log_paths = log_files
+                else:
+                    print(f"No log files found in: {interactive_path}")
+        
+        if not log_paths:
+            print("Error: No log files found.")
+            if not args.interactive:
+                print("Use --log-path to specify log file locations, or try:")
+                print("  --interactive   to enter paths interactively")
+                print("  --list-logs     to see what the script is looking for")
+                print("  --environment   to see detected environment info")
+            sys.exit(1)
     
     if args.verbose:
         print(f"Using log files:")
@@ -565,7 +700,7 @@ Environment Variables (optional):
     
     # Analyze logs
     analyzer = JellyfinLogAnalyzer(log_paths)
-    analyzer.analyze_logs(categories, args.max_errors)
+    analyzer.analyze_logs(categories, args.max_errors, args.verbose)
     analyzer.generate_report(args.output)
     
     # Print summary

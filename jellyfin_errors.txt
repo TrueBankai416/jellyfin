@@ -1,0 +1,57 @@
+JELLYFIN LOG ANALYSIS REPORT
+==================================================
+Generated: 2025-09-24 21:43:20
+Log files analyzed: test_logs/jellyfin.log
+
+
+GENERAL ERRORS
+------------------------------
+
+Error #1:
+File: test_logs/jellyfin.log
+Line: 1
+Timestamp: 2024-01-15 10:00:00.123 +00:00
+Level: ERR
+Category: MediaBrowser.MediaEncoding
+Message: FFmpeg exited with code 1
+Raw line: [2024-01-15 10:00:00.123 +00:00] [ERR] [MediaBrowser.MediaEncoding] FFmpeg exited with code 1
+--------------------------------------------------
+
+NETWORKING ERRORS
+------------------------------
+
+Error #1:
+File: test_logs/jellyfin.log
+Line: 3
+Timestamp: 2024-01-15 12:00:00.789 +00:00
+Level: ERR
+Category: MediaBrowser.Networking
+Message: Connection timeout to remote server
+Raw line: [2024-01-15 12:00:00.789 +00:00] [ERR] [MediaBrowser.Networking] Connection timeout to remote server
+--------------------------------------------------
+
+TRANSCODING ERRORS
+------------------------------
+
+Error #1:
+File: test_logs/jellyfin.log
+Line: 4
+Timestamp: 2024-01-15 13:00:00.012 +00:00
+Level: ERR
+Category: MediaBrowser.MediaEncoding
+Message: Hardware acceleration failed, falling back to software
+Raw line: [2024-01-15 13:00:00.012 +00:00] [ERR] [MediaBrowser.MediaEncoding] Hardware acceleration failed, falling back to software
+--------------------------------------------------
+
+PLAYBACK ERRORS
+------------------------------
+
+Error #1:
+File: test_logs/jellyfin.log
+Line: 6
+Timestamp: 2024-01-15 15:00:00.678 +00:00
+Level: ERR
+Category: MediaBrowser.Playback
+Message: Stream failed to start
+Raw line: [2024-01-15 15:00:00.678 +00:00] [ERR] [MediaBrowser.Playback] Stream failed to start
+--------------------------------------------------
