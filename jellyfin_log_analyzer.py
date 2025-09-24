@@ -217,8 +217,8 @@ class JellyfinLogAnalyzer:
         
         # Check for transcoding-specific patterns
         transcoding_patterns = [
-            r"play_method.*=.*transcode",
-            r"ffmpeg.*-i\s+file:",
+            r"(?:play\s*method|playmethod).*transcode",  # Handle PlayMethod, Play method, play_method
+            r"ffmpeg.*-i\s*[\"']?file:",  # Handle quoted file: prefixes
             r"started.*transcod",
             r"transcod.*start",
             r"h264_nvenc|libx264|hevc_nvenc|libx265",  # Video encoders
@@ -234,23 +234,25 @@ class JellyfinLogAnalyzer:
         details = {}
         message = entry.message
         
-        # Extract play method
-        play_method_match = re.search(r'play_method\s*=\s*"([^"]+)"', message)
+        # Extract play method - handle various formats
+        play_method_match = re.search(r'(?:PlayMethod|Play\s*method|play_method)\s*[:=]\s*"([^"]+)"', message, re.IGNORECASE)
         if play_method_match:
             details['play_method'] = play_method_match.group(1)
         
-        # Extract user information
-        user_match = re.search(r'User "([^"]+)"', message)
+        # Extract user information - handle various formats
+        user_match = re.search(r'User(?:Name)?\s*[:=]\s*"([^"]+)"', message, re.IGNORECASE)
+        if not user_match:
+            user_match = re.search(r'User "([^"]+)"', message)
         if user_match:
             details['user'] = user_match.group(1)
         
-        # Extract client information
-        client_match = re.search(r'e\.ClientName\s*=\s*"([^"]+)"', message)
+        # Extract client information - handle with/without e. prefix
+        client_match = re.search(r'(?:e\.)?ClientName\s*[:=]\s*"([^"]+)"', message, re.IGNORECASE)
         if client_match:
             details['client'] = client_match.group(1)
         
-        # Extract device information
-        device_match = re.search(r'e\.DeviceName\s*=\s*"([^"]+)"', message)
+        # Extract device information - handle with/without e. prefix
+        device_match = re.search(r'(?:e\.)?DeviceName\s*[:=]\s*"([^"]+)"', message, re.IGNORECASE)
         if device_match:
             details['device'] = device_match.group(1)
         
@@ -270,8 +272,8 @@ class JellyfinLogAnalyzer:
         """Analyze FFmpeg command to determine transcode reasons"""
         reasons = {}
         
-        # Video scaling detection
-        scale_match = re.search(r'scale(?:_cuda)?=w=(\d+):h=(\d+)', ffmpeg_cmd)
+        # Video scaling detection - handle multiple formats
+        scale_match = re.search(r'scale(?:_cuda)?=(?:w=)?(\d+)(?::h=|:)(\d+)', ffmpeg_cmd)
         if scale_match:
             width, height = scale_match.groups()
             reasons['video_scaling'] = f"Scaling to {width}x{height}"
@@ -300,15 +302,26 @@ class JellyfinLogAnalyzer:
             channels = ac_match.group(1)
             reasons['audio_channels'] = f"Converting to {channels} channels"
         
-        # Bitrate limiting
-        bitrate_match = re.search(r'-b:v (\d+)', ffmpeg_cmd)
+        # Bitrate limiting - handle units
+        bitrate_match = re.search(r'-b:v\s+(\d+)([kKmM]?)', ffmpeg_cmd)
         if bitrate_match:
-            bitrate = int(bitrate_match.group(1)) // 1000  # Convert to kbps
-            reasons['video_bitrate'] = f"Limiting bitrate to {bitrate} kbps"
+            bitrate_value = int(bitrate_match.group(1))
+            unit = bitrate_match.group(2).lower()
+            
+            if unit == 'k':
+                bitrate_kbps = bitrate_value
+            elif unit == 'm':
+                bitrate_kbps = bitrate_value * 1000
+            else:
+                bitrate_kbps = bitrate_value // 1000  # Assume bits, convert to kbps
+            
+            reasons['video_bitrate'] = f"Limiting bitrate to {bitrate_kbps} kbps"
         
-        # Hardware acceleration
-        if 'hwaccel cuda' in ffmpeg_cmd:
-            reasons['hardware_accel'] = "Using CUDA hardware acceleration"
+        # Hardware acceleration - detect various types
+        hwaccel_match = re.search(r'-hwaccel\s+(\w+)', ffmpeg_cmd)
+        if hwaccel_match:
+            accel_type = hwaccel_match.group(1).upper()
+            reasons['hardware_accel'] = f"Using {accel_type} hardware acceleration"
         elif 'hwaccel' in ffmpeg_cmd:
             reasons['hardware_accel'] = "Using hardware acceleration"
         
@@ -464,7 +477,10 @@ class JellyfinLogAnalyzer:
                     return
                 
                 for category, errors in self.found_errors.items():
-                    f.write(f"\n{category.upper()} ERRORS\n")
+                    if category == 'transcoding':
+                        f.write(f"\n{category.upper()}\n")  # Just "TRANSCODING" not "TRANSCODING ERRORS"
+                    else:
+                        f.write(f"\n{category.upper()} ERRORS\n")
                     f.write("-" * 30 + "\n")
                     
                     if not errors:
@@ -743,8 +759,15 @@ def _is_log_file(filename: str) -> bool:
         'log',  # Generic log files like log.txt
     ]
     
-    # Accept files with jellyfin-specific patterns or generic log names
-    return any(pattern in filename_lower for pattern in jellyfin_patterns)
+    # Accept files with jellyfin-specific patterns, generic log names, or ffmpeg transcode logs
+    if any(pattern in filename_lower for pattern in jellyfin_patterns):
+        return True
+    
+    # Accept FFmpeg transcode log files
+    if filename_lower.startswith('ffmpeg'):
+        return True
+    
+    return False
 
 def get_interactive_log_path() -> Optional[str]:
     """Interactively ask user for log path when auto-detection fails"""
