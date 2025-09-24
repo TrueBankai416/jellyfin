@@ -35,7 +35,7 @@ A comprehensive script to analyze Jellyfin logs and extract different types of e
 
 ### Prerequisites
 
-- **Python 3.6+** (Python 3.7+ recommended)
+- **Python 3.7+** (required for dataclasses support)
 - No additional Python packages required (uses only standard library)
 
 ### Download

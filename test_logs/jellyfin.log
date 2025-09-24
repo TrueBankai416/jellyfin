@@ -1,6 +1,0 @@
-[2024-01-15 10:00:00.123 +00:00] [ERR] [MediaBrowser.MediaEncoding] FFmpeg exited with code 1
-[2024-01-15 11:00:00.456 +00:00] [INF] [MediaBrowser.Core] Server started successfully
-[2024-01-15 12:00:00.789 +00:00] [ERR] [MediaBrowser.Networking] Connection timeout to remote server
-[2024-01-15 13:00:00.012 +00:00] [ERR] [MediaBrowser.MediaEncoding] Hardware acceleration failed, falling back to software
-[2024-01-15 14:00:00.345 +00:00] [WRN] [MediaBrowser.Core] Low disk space warning
-[2024-01-15 15:00:00.678 +00:00] [ERR] [MediaBrowser.Playback] Stream failed to start

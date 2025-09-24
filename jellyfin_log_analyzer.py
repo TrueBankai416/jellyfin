@@ -10,10 +10,9 @@ import re
 import os
 import sys
 from datetime import datetime
-from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Optional
 from dataclasses import dataclass
-from collections import defaultdict, deque
+from collections import defaultdict
 
 @dataclass
 class LogEntry:
@@ -39,7 +38,7 @@ class ErrorPattern:
     
     TRANSCODING = [
         r"transcode.*(?:failed|error|exception)",
-        r"ffmpeg.*(?:error|failed|exception)",
+        r"ffmpeg.*(?:error|failed|exception|exited.*code\s*\d+)",
         r"hardware.*acceleration.*(?:failed|unavailable|error)",
         r"codec.*(?:not.*supported|failed|error)",
         r"video.*(?:encoding|decoding).*(?:failed|error)",
@@ -475,28 +474,22 @@ def _scan_directory_for_logs(directory: str) -> List[str]:
 
 def _is_log_file(filename: str) -> bool:
     """Check if a file is likely a log file"""
-    log_extensions = ['.log', '.txt']
-    log_patterns = [
-        'jellyfin',
-        'server',
-        'error',
-        'debug',
-        'info',
-        'warn',
-        'trace',
-    ]
-    
     filename_lower = filename.lower()
     
-    # Check extension
-    if any(filename_lower.endswith(ext) for ext in log_extensions):
-        return True
+    # Must have a log-like extension
+    log_extensions = ['.log', '.txt']
+    if not any(filename_lower.endswith(ext) for ext in log_extensions):
+        return False
     
-    # Check for log-like patterns in filename
-    if any(pattern in filename_lower for pattern in log_patterns):
-        return True
+    # Check for specific Jellyfin log patterns or generic log names
+    jellyfin_patterns = [
+        'jellyfin',
+        'server',
+        'log',  # Generic log files like log.txt
+    ]
     
-    return False
+    # Accept files with jellyfin-specific patterns or generic log names
+    return any(pattern in filename_lower for pattern in jellyfin_patterns)
 
 def get_interactive_log_path() -> Optional[str]:
     """Interactively ask user for log path when auto-detection fails"""
@@ -671,9 +664,9 @@ Environment Variables (optional):
         # Use specified paths if provided, otherwise auto-detect
         log_paths = args.log_path if args.log_path else find_jellyfin_logs(args.verbose)
     
-    # If no log paths found and interactive mode is enabled or no paths specified
+    # If no log paths found, handle based on interactive flag
     if not log_paths:
-        if args.interactive or (not args.log_path and not args.no_auto_detect):
+        if args.interactive:
             interactive_path = get_interactive_log_path()
             if interactive_path:
                 # Scan the interactive path for log files
@@ -685,11 +678,10 @@ Environment Variables (optional):
         
         if not log_paths:
             print("Error: No log files found.")
-            if not args.interactive:
-                print("Use --log-path to specify log file locations, or try:")
-                print("  --interactive   to enter paths interactively")
-                print("  --list-logs     to see what the script is looking for")
-                print("  --environment   to see detected environment info")
+            print("Use --log-path to specify log file locations, or try:")
+            print("  --interactive   to enter paths interactively")
+            print("  --list-logs     to see what the script is looking for")
+            print("  --environment   to see detected environment info")
             sys.exit(1)
     
     if args.verbose:
