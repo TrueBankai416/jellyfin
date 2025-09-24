@@ -770,6 +770,16 @@ def _is_log_file(filename: str) -> bool:
     
     return False
 
+def generate_output_filename(categories: List[str]) -> str:
+    """Generate output filename based on selected categories"""
+    if not categories:
+        return 'jellyfin_errors.txt'
+    
+    # Sort categories for consistent naming
+    sorted_categories = sorted(categories)
+    category_string = '_'.join(sorted_categories)
+    return f'jellyfin_log_{category_string}.txt'
+
 def get_interactive_log_path() -> Optional[str]:
     """Interactively ask user for log path when auto-detection fails"""
     try:
@@ -858,8 +868,8 @@ Environment Variables (optional):
     # Configuration options
     parser.add_argument('--log-path', action='append',
                        help='Path to log file (can be used multiple times)')
-    parser.add_argument('--output', '-o', default='jellyfin_errors.txt',
-                       help='Output file for error report (default: jellyfin_errors.txt)')
+    parser.add_argument('--output', '-o',
+                       help='Output file for error report (default: auto-generated based on categories)')
     parser.add_argument('--max-errors', type=int, default=2,
                        help='Maximum errors per category (default: 2)')
     parser.add_argument('--no-auto-detect', action='store_true',
@@ -972,10 +982,13 @@ Environment Variables (optional):
             print(f"  - {log_path}")
         print()
     
+    # Generate output filename if not provided
+    output_file = args.output if args.output else generate_output_filename(categories)
+    
     # Analyze logs
     analyzer = JellyfinLogAnalyzer(log_paths)
     analyzer.analyze_logs(categories, args.max_errors, args.verbose)
-    analyzer.generate_report(args.output)
+    analyzer.generate_report(output_file)
     
     # Print summary
     total_items = sum(len(errors) for errors in analyzer.found_errors.values())
@@ -1001,7 +1014,7 @@ Environment Variables (optional):
         print(f"Total: {total_errors} errors, {total_transcoding_events} transcoding events")
     
     if total_errors > 0 or total_transcoding_events > 0:
-        print(f"\nDetailed report saved to: {args.output}")
+        print(f"\nDetailed report saved to: {output_file}")
     else:
         print("\nNo errors or transcoding events found matching the specified criteria.")
 
