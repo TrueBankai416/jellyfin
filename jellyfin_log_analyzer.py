@@ -279,11 +279,20 @@ class JellyfinLogAnalyzer:
             details['play_method'] = play_method_match.group(1)
         
         # Extract user information - handle various formats
-        user_match = re.search(r'User(?:Name)?\s*[:=]\s*"([^"]+)"', message, re.IGNORECASE)
+        user_match = re.search(r'(?:User(?:Name)?|event_user_id)\s*[:=]\s*"([^"]+)"', message, re.IGNORECASE)
         if not user_match:
             user_match = re.search(r'User "([^"]+)"', message)
+        if not user_match:
+            # Look for user in the full log context (might be in previous lines)
+            user_match = re.search(r'(?:User(?:Name)?|event_user_id)\s*[:=]\s*"([^"]+)"', entry.raw_line, re.IGNORECASE)
         if user_match:
-            details['user'] = user_match.group(1)
+            # For event_user_id, we need to map it to a user name (but we'll use the ID for now)
+            user_id = user_match.group(1)
+            if 'event_user_id' in user_match.group(0).lower():
+                # This is a user ID, we could map it to a name but for now use a placeholder
+                details['user'] = f"User ID: {user_id}"
+            else:
+                details['user'] = user_id
         
         # Extract client information - handle with/without e. prefix
         client_match = re.search(r'(?:e\.)?ClientName\s*[:=]\s*"([^"]+)"', message, re.IGNORECASE)
@@ -365,6 +374,77 @@ class JellyfinLogAnalyzer:
             reasons['hardware_accel'] = "Using hardware acceleration"
         
         return reasons
+    
+    def correlate_transcoding_events(self, events: List[Dict]) -> List[Dict]:
+        """Correlate related transcoding events into sessions"""
+        sessions = {}
+        
+        for event in events:
+            entry = event['entry']
+            
+            # Try to extract session/item identifier
+            session_id = None
+            
+            # Look for ItemId or playing_id in the message
+            item_id_match = re.search(r'(?:ItemId|playing_id|event_playing_id)\s*=\s*"([^"]+)"', entry.message)
+            if item_id_match:
+                session_id = item_id_match.group(1)
+            
+            # Look for media file path as fallback identifier
+            if not session_id:
+                file_match = re.search(r'file:\\"([^"]+)\\"', entry.message)
+                if file_match:
+                    # Use just the filename as session identifier
+                    import os
+                    session_id = os.path.basename(file_match.group(1))
+            
+            # If no session ID found, use timestamp-based grouping (events within 60 seconds)
+            if not session_id:
+                timestamp = event.get('timestamp')
+                if timestamp:
+                    # Group events within 60 seconds of each other (more generous for related events)
+                    session_id = f"time_{int(timestamp.timestamp() // 60)}"
+                else:
+                    session_id = f"unknown_{len(sessions)}"
+            
+            if session_id not in sessions:
+                sessions[session_id] = {
+                    'events': [],
+                    'combined_details': {},
+                    'latest_timestamp': None
+                }
+            
+            sessions[session_id]['events'].append(event)
+            
+            # Update latest timestamp
+            if event.get('timestamp'):
+                if not sessions[session_id]['latest_timestamp'] or event['timestamp'] > sessions[session_id]['latest_timestamp']:
+                    sessions[session_id]['latest_timestamp'] = event['timestamp']
+        
+        # Combine details from all events in each session
+        correlated_sessions = []
+        for session_id, session_data in sessions.items():
+            combined_details = {}
+            
+            # Merge details from all events in the session
+            for event in session_data['events']:
+                event_details = event.get('transcoding_details', {})
+                for key, value in event_details.items():
+                    if key not in combined_details and value:
+                        combined_details[key] = value
+            
+            # Create a representative event for the session
+            representative_event = session_data['events'][0]  # Use first event as base
+            representative_event['transcoding_details'] = combined_details
+            representative_event['timestamp'] = session_data['latest_timestamp']
+            representative_event['session_id'] = session_id
+            
+            correlated_sessions.append(representative_event)
+        
+        # Sort by timestamp (latest first)
+        correlated_sessions.sort(key=lambda x: x.get('timestamp') or datetime.min, reverse=True)
+        
+        return correlated_sessions
     
     def parse_timestamp(self, entry: LogEntry) -> Optional[datetime]:
         """Parse timestamp from log entry and normalize to naive UTC"""
@@ -510,10 +590,15 @@ class JellyfinLogAnalyzer:
         
         # Sort errors by timestamp and keep only the latest N per category
         for category, errors in all_errors.items():
-            # Sort by timestamp (newest first), with None timestamps at the end
-            errors.sort(key=lambda x: x['timestamp'] or datetime.min, reverse=True)
-            # Keep only the latest max_errors_per_category
-            self.found_errors[category] = errors[:max_errors_per_category]
+            # Special handling for transcoding events - correlate related events
+            if category == 'transcoding':
+                correlated_events = self.correlate_transcoding_events(errors)
+                self.found_errors[category] = correlated_events[:max_errors_per_category]
+            else:
+                # Sort by timestamp (newest first), with None timestamps at the end
+                errors.sort(key=lambda x: x['timestamp'] or datetime.min, reverse=True)
+                # Keep only the latest max_errors_per_category
+                self.found_errors[category] = errors[:max_errors_per_category]
     
     def generate_report(self, output_file: str):
         """Generate a formatted report of found errors"""
@@ -545,18 +630,18 @@ class JellyfinLogAnalyzer:
                         entry = error_info['entry']
                         event_type = error_info.get('event_type', 'error')
                         
+                        # Simplified format for transcoding and DirectStream events
                         if event_type == 'transcoding_event':
-                            f.write(f"\nTranscoding Event #{i}:\n")
+                            f.write(f"\nTranscoding Event:\n")
                         elif event_type == 'directstream_event':
-                            f.write(f"\nDirectStream Event #{i}:\n")
+                            f.write(f"\nDirectStream Event:\n")
                         else:
                             f.write(f"\nError #{i}:\n")
-                        
-                        f.write(f"File: {error_info['file']}\n")
-                        f.write(f"Line: {error_info['line_number']}\n")
-                        f.write(f"Timestamp: {entry.timestamp}\n")
-                        f.write(f"Level: {entry.level}\n")
-                        f.write(f"Category: {entry.category}\n")
+                            f.write(f"File: {error_info['file']}\n")
+                            f.write(f"Line: {error_info['line_number']}\n")
+                            f.write(f"Timestamp: {entry.timestamp}\n")
+                            f.write(f"Level: {entry.level}\n")
+                            f.write(f"Category: {entry.category}\n")
                         
                         # Enhanced transcoding information
                         if event_type == 'transcoding_event' and 'transcoding_details' in error_info:
@@ -624,15 +709,13 @@ class JellyfinLogAnalyzer:
                             if reasons:
                                 f.write(f"DirectStream Reasons: {'; '.join(reasons)}\n")
                         
-                        f.write(f"Message: {entry.message}\n")
-                        
-                        if entry.exception:
-                            f.write(f"Exception: {entry.exception}\n")
-                        
-                        # For transcoding events, don't show the full FFmpeg command in raw line (too long)
-                        if event_type == 'transcoding_event' and 'ffmpeg' in entry.raw_line.lower():
-                            f.write(f"Raw line: [FFmpeg command - see message above]\n")
-                        else:
+                        # Only show technical details for regular errors, not transcoding/DirectStream events
+                        if event_type not in ['transcoding_event', 'directstream_event']:
+                            f.write(f"Message: {entry.message}\n")
+                            
+                            if entry.exception:
+                                f.write(f"Exception: {entry.exception}\n")
+                            
                             f.write(f"Raw line: {entry.raw_line}\n")
                         
                         f.write("-" * 50 + "\n")
