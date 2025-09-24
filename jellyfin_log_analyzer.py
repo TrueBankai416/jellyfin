@@ -230,8 +230,8 @@ class JellyfinLogAnalyzer:
         if 'ffprobe' in full_text:
             return False
         
-        # Exclude DirectPlay events (not transcoding)
-        if 'directplay' in full_text:
+        # Exclude DirectPlay events (not transcoding) - handle both "DirectPlay" and "Direct Play"
+        if re.search(r'direct\s*play', full_text):
             return False
         
         return any(re.search(pattern, full_text, re.IGNORECASE) for pattern in transcoding_patterns)
