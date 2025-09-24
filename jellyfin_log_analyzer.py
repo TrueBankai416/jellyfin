@@ -278,13 +278,13 @@ class JellyfinLogAnalyzer:
         if play_method_match:
             details['play_method'] = play_method_match.group(1)
         
-        # Extract user information - handle various formats
-        user_match = re.search(r'(?:User(?:Name)?|event_user_id)\s*[:=]\s*"([^"]+)"', message, re.IGNORECASE)
+        # Extract user information - handle various formats including e.-prefixed
+        user_match = re.search(r'(?:e\.)?(?:User(?:Name)?|event_user_id)\s*[:=]\s*"([^"]+)"', message, re.IGNORECASE)
         if not user_match:
             user_match = re.search(r'User "([^"]+)"', message)
         if not user_match:
             # Look for user in the full log context (might be in previous lines)
-            user_match = re.search(r'(?:User(?:Name)?|event_user_id)\s*[:=]\s*"([^"]+)"', entry.raw_line, re.IGNORECASE)
+            user_match = re.search(r'(?:e\.)?(?:User(?:Name)?|event_user_id)\s*[:=]\s*"([^"]+)"', entry.raw_line, re.IGNORECASE)
         if user_match:
             # For event_user_id, we need to map it to a user name (but we'll use the ID for now)
             user_id = user_match.group(1)
@@ -304,8 +304,8 @@ class JellyfinLogAnalyzer:
         if device_match:
             details['device'] = device_match.group(1)
         
-        # Extract media information
-        item_match = re.search(r'ItemName\s*=\s*"([^"]+)"', message)
+        # Extract media information - handle e.-prefixed ItemName
+        item_match = re.search(r'(?:e\.)?ItemName\s*=\s*"([^"]+)"', message)
         if item_match:
             details['media'] = item_match.group(1)
         
@@ -438,6 +438,8 @@ class JellyfinLogAnalyzer:
             representative_event['transcoding_details'] = combined_details
             representative_event['timestamp'] = session_data['latest_timestamp']
             representative_event['session_id'] = session_id
+            # Force event type to transcoding_event for correlated sessions
+            representative_event['event_type'] = 'transcoding_event'
             
             correlated_sessions.append(representative_event)
         
