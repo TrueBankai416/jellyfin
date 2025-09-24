@@ -1000,10 +1000,10 @@ Environment Variables (optional):
     if total_transcoding_events > 0:
         print(f"Total: {total_errors} errors, {total_transcoding_events} transcoding events")
     
-    if total_errors > 0:
+    if total_errors > 0 or total_transcoding_events > 0:
         print(f"\nDetailed report saved to: {args.output}")
     else:
-        print("\nNo errors found matching the specified criteria.")
+        print("\nNo errors or transcoding events found matching the specified criteria.")
 
 if __name__ == "__main__":
     main()
