@@ -167,6 +167,13 @@ class JellyfinLogAnalyzer:
         if entry.level.upper() in error_levels:
             return True
         
+        # Check for FFmpeg non-zero exit codes (often logged at non-error levels)
+        exit_code_match = re.search(r'exited\s+with\s+code\s+(\d+)', entry.message, re.IGNORECASE)
+        if exit_code_match:
+            exit_code = int(exit_code_match.group(1))
+            if exit_code != 0:
+                return True
+        
         # Check for error keywords in message
         error_keywords = ['error', 'exception', 'failed', 'failure', 'critical', 'fatal']
         message_lower = entry.message.lower()
@@ -232,7 +239,8 @@ class JellyfinLogAnalyzer:
     def categorize_error(self, entry: LogEntry, selected_categories: List[str]) -> List[str]:
         """Categorize an error entry based on patterns"""
         categories = []
-        full_text = f"{entry.message} {entry.exception}".lower()
+        # Include category field for better classification (e.g., MediaBrowser.MediaEncoding)
+        full_text = f"{entry.message} {entry.exception} {entry.category}".lower()
         
         for category in selected_categories:
             if category in self.error_patterns:
@@ -293,41 +301,46 @@ class JellyfinLogAnalyzer:
     
     def generate_report(self, output_file: str):
         """Generate a formatted report of found errors"""
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write("JELLYFIN LOG ANALYSIS REPORT\n")
-            f.write("=" * 50 + "\n")
-            f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write(f"Log files analyzed: {', '.join(self.log_paths)}\n\n")
-            
-            if not self.found_errors:
-                f.write("No errors found matching the specified criteria.\n")
-                return
-            
-            for category, errors in self.found_errors.items():
-                f.write(f"\n{category.upper()} ERRORS\n")
-                f.write("-" * 30 + "\n")
+        try:
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write("JELLYFIN LOG ANALYSIS REPORT\n")
+                f.write("=" * 50 + "\n")
+                f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"Log files analyzed: {', '.join(self.log_paths)}\n\n")
                 
-                if not errors:
-                    f.write("No errors found in this category.\n")
-                    continue
+                if not self.found_errors:
+                    f.write("No errors found matching the specified criteria.\n")
+                    return
                 
-                for i, error_info in enumerate(errors, 1):
-                    entry = error_info['entry']
-                    f.write(f"\nError #{i}:\n")
-                    f.write(f"File: {error_info['file']}\n")
-                    f.write(f"Line: {error_info['line_number']}\n")
-                    f.write(f"Timestamp: {entry.timestamp}\n")
-                    f.write(f"Level: {entry.level}\n")
-                    f.write(f"Category: {entry.category}\n")
-                    f.write(f"Message: {entry.message}\n")
+                for category, errors in self.found_errors.items():
+                    f.write(f"\n{category.upper()} ERRORS\n")
+                    f.write("-" * 30 + "\n")
                     
-                    if entry.exception:
-                        f.write(f"Exception: {entry.exception}\n")
+                    if not errors:
+                        f.write("No errors found in this category.\n")
+                        continue
                     
-                    f.write(f"Raw line: {entry.raw_line}\n")
-                    f.write("-" * 50 + "\n")
-        
-        print(f"Report saved to: {output_file}")
+                    for i, error_info in enumerate(errors, 1):
+                        entry = error_info['entry']
+                        f.write(f"\nError #{i}:\n")
+                        f.write(f"File: {error_info['file']}\n")
+                        f.write(f"Line: {error_info['line_number']}\n")
+                        f.write(f"Timestamp: {entry.timestamp}\n")
+                        f.write(f"Level: {entry.level}\n")
+                        f.write(f"Category: {entry.category}\n")
+                        f.write(f"Message: {entry.message}\n")
+                        
+                        if entry.exception:
+                            f.write(f"Exception: {entry.exception}\n")
+                        
+                        f.write(f"Raw line: {entry.raw_line}\n")
+                        f.write("-" * 50 + "\n")
+            
+            print(f"Report saved to: {output_file}")
+        except (OSError, IOError) as e:
+            print(f"Error: Unable to write report to {output_file}: {e}")
+            print("Please check that the directory exists and is writable.")
+            sys.exit(1)
 
 def detect_environment() -> str:
     """Detect the current environment (docker, native, etc.)"""

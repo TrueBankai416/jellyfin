@@ -2,8 +2,6 @@
 # Jellyfin Log Analyzer - Linux Shell Wrapper
 # This script makes it easy to run the Jellyfin log analyzer on Linux
 
-set -e
-
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -91,11 +89,12 @@ fi
 # Run the Python script with all provided arguments
 print_info "Running Jellyfin Log Analyzer..."
 $PYTHON_CMD "$SCRIPT_DIR/jellyfin_log_analyzer.py" "$@"
+status=$?
 
 # Check exit status
-if [[ $? -eq 0 ]]; then
+if [[ $status -eq 0 ]]; then
     print_success "Analysis completed successfully!"
 else
     print_error "Script execution failed"
-    exit 1
+    exit $status
 fi
