@@ -215,18 +215,25 @@ class JellyfinLogAnalyzer:
         if not entry:
             return False
         
-        # Check for transcoding-specific patterns
+        # Check for transcoding-specific patterns (exclude analysis/refresh operations)
         transcoding_patterns = [
-            r"(?:PlayMethod|Play\s*method|play_method)\s*[:=].*transcode",  # Handle all play method variants
-            r"ffmpeg.*-i\s*(?:[\"']?(?:file:|pipe:|https?://|concat:)|\S)",  # Handle various FFmpeg inputs
+            r"(?:PlayMethod|Play\s*method|play_method)\s*[:=].*transcode",  # Only actual transcoding, not DirectPlay
+            r"ffmpeg.*-i\s*(?:[\"']?(?:file:|pipe:|https?://|concat:)|\S)",  # FFmpeg with input (will be filtered by exclusions)
+            r"(?:h264_nvenc|libx264|hevc_nvenc|libx265)",  # Video encoders indicate transcoding
             r"started.*transcod",
             r"transcod.*start",
-            r"h264_nvenc|libx264|hevc_nvenc|libx265",  # Video encoders
-            r"libfdk_aac|aac|ac3|eac3",  # Audio encoders
-            r"scale_cuda|scale=|vf.*scale",  # Video scaling
         ]
         
         full_text = f"{entry.message} {entry.category}".lower()
+        
+        # Exclude ffprobe commands (media analysis, not transcoding)
+        if 'ffprobe' in full_text:
+            return False
+        
+        # Exclude DirectPlay events (not transcoding)
+        if 'directplay' in full_text:
+            return False
+        
         return any(re.search(pattern, full_text, re.IGNORECASE) for pattern in transcoding_patterns)
     
     def extract_transcoding_details(self, entry: LogEntry) -> Dict[str, str]:
