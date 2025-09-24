@@ -120,8 +120,15 @@ python jellyfin_log_analyzer.py --all
 
 ### Configuration
 - `--log-path PATH`: Specify custom log file path (can be used multiple times)
-- `--output FILE`: Output file for error report (default: `jellyfin_errors.txt`)
+- `--output FILE`: Output file for error report (default: auto-generated based on selected categories)
 - `--max-errors N`: Maximum errors per category (default: 2)
+
+#### Dynamic Output Filenames
+When `--output` is not specified, the script automatically generates filenames based on selected categories:
+- `--transcoding` → `jellyfin_log_transcoding.txt`
+- `--networking` → `jellyfin_log_networking.txt`
+- `--transcoding --playback` → `jellyfin_log_playback_transcoding.txt`
+- `--all` → `jellyfin_log_authentication_database_general_networking_playback_plugin_transcoding.txt`
 
 ### Information
 - `--list-logs`: List detected log files and exit

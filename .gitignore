@@ -1,6 +1,7 @@
 # Jellyfin Log Analyzer generated files
 jellyfin_errors.txt
 *_errors.txt
+jellyfin_log_*.txt
 test_logs/
 *.log
 
