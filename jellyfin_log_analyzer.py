@@ -180,11 +180,20 @@ class JellyfinLogAnalyzer:
         # Try parsing JSON format timestamp (@t field)
         if 'T' in entry.timestamp and ('Z' in entry.timestamp or '+' in entry.timestamp):
             try:
-                # Handle ISO format with timezone
+                # Handle ISO format with timezone and normalize fractional seconds
                 timestamp_str = entry.timestamp.replace('Z', '+00:00')
-                if '+' not in timestamp_str[-6:]:
-                    timestamp_str += '+00:00'
-                return datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                
+                # Handle fractional seconds with more than 6 digits (Python limitation)
+                if '.' in timestamp_str:
+                    main_part, sep, offset_part = timestamp_str.partition('+')
+                    if '.' in main_part:
+                        date_part, dot, frac_part = main_part.partition('.')
+                        # Keep only digits and truncate to 6 digits max
+                        frac_digits = re.sub(r'[^0-9].*$', '', frac_part)[:6]
+                        main_part = f"{date_part}.{frac_digits}"
+                    timestamp_str = main_part + (sep + offset_part if sep else '')
+                
+                return datetime.fromisoformat(timestamp_str)
             except ValueError:
                 pass
         
@@ -456,6 +465,30 @@ def find_jellyfin_logs(verbose: bool = False) -> List[str]:
     
     return unique_log_files
 
+def resolve_to_log_files(paths: List[str]) -> List[str]:
+    """Resolve a list of paths (files or directories) to actual log files"""
+    resolved_files = []
+    
+    for path in paths:
+        # Expand environment variables and user home
+        expanded_path = os.path.expanduser(os.path.expandvars(path))
+        
+        if os.path.isdir(expanded_path):
+            # If it's a directory, scan for log files
+            log_files = _scan_directory_for_logs(expanded_path)
+            resolved_files.extend(log_files)
+        elif os.path.isfile(expanded_path):
+            # If it's a file, check if it looks like a log file
+            if _is_log_file(os.path.basename(expanded_path)):
+                resolved_files.append(expanded_path)
+            else:
+                print(f"Warning: {path} doesn't appear to be a log file, including anyway")
+                resolved_files.append(expanded_path)
+        else:
+            print(f"Warning: Path not found: {path}")
+    
+    return resolved_files
+
 def _scan_directory_for_logs(directory: str) -> List[str]:
     """Scan a directory for log files"""
     log_files = []
@@ -659,10 +692,13 @@ Environment Variables (optional):
     # Determine log file paths
     if args.no_auto_detect:
         # Use only specified paths, no auto-detection
-        log_paths = args.log_path or []
+        log_paths = resolve_to_log_files(args.log_path or [])
     else:
         # Use specified paths if provided, otherwise auto-detect
-        log_paths = args.log_path if args.log_path else find_jellyfin_logs(args.verbose)
+        if args.log_path:
+            log_paths = resolve_to_log_files(args.log_path)
+        else:
+            log_paths = find_jellyfin_logs(args.verbose)
     
     # If no log paths found, handle based on interactive flag
     if not log_paths:
