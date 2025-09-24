@@ -217,8 +217,8 @@ class JellyfinLogAnalyzer:
         
         # Check for transcoding-specific patterns
         transcoding_patterns = [
-            r"(?:play\s*method|playmethod).*transcode",  # Handle PlayMethod, Play method, play_method
-            r"ffmpeg.*-i\s*[\"']?file:",  # Handle quoted file: prefixes
+            r"(?:PlayMethod|Play\s*method|play_method)\s*[:=].*transcode",  # Handle all play method variants
+            r"ffmpeg.*-i\s*(?:[\"']?(?:file:|pipe:|https?://|concat:)|\S)",  # Handle various FFmpeg inputs
             r"started.*transcod",
             r"transcod.*start",
             r"h264_nvenc|libx264|hevc_nvenc|libx265",  # Video encoders
@@ -666,6 +666,7 @@ def find_jellyfin_logs(verbose: bool = False) -> List[str]:
         "~/jellyfin/log/",
         "/opt/jellyfin/log/",
         "/usr/share/jellyfin/log/",
+        "/var/log/jellyfin/",  # Add as fallback in case environment detection misses it
         
         # Windows fallbacks
         os.path.expandvars(r'%USERPROFILE%\jellyfin\log') if os.name == 'nt' else None,
