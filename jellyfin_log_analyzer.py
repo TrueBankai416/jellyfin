@@ -358,40 +358,50 @@ class JellyfinLogAnalyzer:
         return details
     
     def analyze_ffmpeg_command(self, ffmpeg_cmd: str) -> Dict[str, str]:
-        """Analyze FFmpeg command to determine transcode reasons"""
+        """Analyze FFmpeg command to determine transcode reasons (prioritizing root causes)"""
         reasons = {}
+        primary_reasons = []
         
-        # Video scaling detection - handle multiple formats
+        # PRIMARY REASON 1: Subtitle burning (most common direct play blocker)
+        if 'filter_complex' in ffmpeg_cmd and 'subtitles=' in ffmpeg_cmd:
+            if '.ass' in ffmpeg_cmd:
+                primary_reasons.append("Burning ASS subtitles into video stream")
+            elif '.srt' in ffmpeg_cmd:
+                primary_reasons.append("Burning SRT subtitles into video stream")
+            elif '.vtt' in ffmpeg_cmd:
+                primary_reasons.append("Burning WebVTT subtitles into video stream")
+            else:
+                primary_reasons.append("Burning subtitles into video stream")
+        elif 'overlay_cuda' in ffmpeg_cmd or 'overlay=' in ffmpeg_cmd:
+            primary_reasons.append("Overlaying subtitles onto video")
+        
+        # PRIMARY REASON 2: Resolution scaling (client can't handle source resolution)
         scale_match = re.search(r'scale(?:_cuda)?=(?:w=)?(\d+)(?::h=|:)(\d+)', ffmpeg_cmd)
         if scale_match:
             width, height = scale_match.groups()
-            reasons['video_scaling'] = f"Scaling to {width}x{height}"
+            primary_reasons.append(f"Client requires {width}x{height} resolution")
         
-        # Video codec conversion
-        if 'h264_nvenc' in ffmpeg_cmd:
-            reasons['video_codec'] = "Converting to H.264 (NVENC)"
-        elif 'libx264' in ffmpeg_cmd:
-            reasons['video_codec'] = "Converting to H.264 (Software)"
-        elif 'hevc_nvenc' in ffmpeg_cmd:
-            reasons['video_codec'] = "Converting to H.265/HEVC (NVENC)"
-        elif 'libx265' in ffmpeg_cmd:
-            reasons['video_codec'] = "Converting to H.265/HEVC (Software)"
+        # PRIMARY REASON 3: Audio format incompatibility
+        audio_copy = '-codec:a:0 copy' in ffmpeg_cmd or '-c:a copy' in ffmpeg_cmd
+        if not audio_copy:
+            if 'libfdk_aac' in ffmpeg_cmd or 'aac' in ffmpeg_cmd:
+                primary_reasons.append("Client requires AAC audio format")
+            elif 'ac3' in ffmpeg_cmd:
+                primary_reasons.append("Client requires AC3 audio format")
+            
+            # Audio channel conversion
+            ac_match = re.search(r'-ac (\d+)', ffmpeg_cmd)
+            if ac_match:
+                channels = ac_match.group(1)
+                primary_reasons.append(f"Client requires {channels} audio channels")
         
-        # Audio codec conversion
-        if 'libfdk_aac' in ffmpeg_cmd:
-            reasons['audio_codec'] = "Converting to AAC (FDK)"
-        elif 'aac' in ffmpeg_cmd:
-            reasons['audio_codec'] = "Converting to AAC"
-        elif 'ac3' in ffmpeg_cmd:
-            reasons['audio_codec'] = "Converting to AC3"
+        # PRIMARY REASON 4: Video codec incompatibility
+        if 'h264_nvenc' in ffmpeg_cmd or 'libx264' in ffmpeg_cmd:
+            primary_reasons.append("Client requires H.264 video codec")
+        elif 'hevc_nvenc' in ffmpeg_cmd or 'libx265' in ffmpeg_cmd:
+            primary_reasons.append("Client requires H.265/HEVC video codec")
         
-        # Audio channel conversion
-        ac_match = re.search(r'-ac (\d+)', ffmpeg_cmd)
-        if ac_match:
-            channels = ac_match.group(1)
-            reasons['audio_channels'] = f"Converting to {channels} channels"
-        
-        # Bitrate limiting - handle units
+        # PRIMARY REASON 5: Bitrate limiting (bandwidth constraint)
         bitrate_match = re.search(r'-b:v\s+(\d+)([kKmM]?)', ffmpeg_cmd)
         if bitrate_match:
             bitrate_value = int(bitrate_match.group(1))
@@ -404,15 +414,30 @@ class JellyfinLogAnalyzer:
             else:
                 bitrate_kbps = bitrate_value // 1000  # Assume bits, convert to kbps
             
-            reasons['video_bitrate'] = f"Limiting bitrate to {bitrate_kbps} kbps"
+            primary_reasons.append(f"Bandwidth limited to {bitrate_kbps} kbps")
         
-        # Hardware acceleration - detect various types
+        # SECONDARY TECHNICAL DETAILS (implementation, not root cause)
+        technical_details = []
+        
+        # Hardware acceleration detection
         hwaccel_match = re.search(r'-hwaccel\s+(\w+)', ffmpeg_cmd)
         if hwaccel_match:
             accel_type = hwaccel_match.group(1).upper()
-            reasons['hardware_accel'] = f"Using {accel_type} hardware acceleration"
+            technical_details.append(f"Using {accel_type} hardware acceleration")
         elif 'hwaccel' in ffmpeg_cmd:
-            reasons['hardware_accel'] = "Using hardware acceleration"
+            technical_details.append("Using hardware acceleration")
+        
+        # Combine primary reasons and technical details
+        if primary_reasons:
+            reasons['primary_reasons'] = "; ".join(primary_reasons)
+        
+        if technical_details:
+            reasons['technical_details'] = "; ".join(technical_details)
+        
+        # For backward compatibility, create combined reason
+        all_reasons = primary_reasons + technical_details
+        if all_reasons:
+            reasons['combined'] = "; ".join(all_reasons)
         
         return reasons
     
@@ -884,23 +909,11 @@ class JellyfinLogAnalyzer:
                             if details.get('user') and not details.get('event_user_id'):
                                 f.write(f"User: {details['user']}\n")
                             
-                            # Transcode reasons
-                            reasons = []
-                            if details.get('video_scaling'):
-                                reasons.append(details['video_scaling'])
-                            if details.get('video_codec'):
-                                reasons.append(details['video_codec'])
-                            if details.get('audio_codec'):
-                                reasons.append(details['audio_codec'])
-                            if details.get('audio_channels'):
-                                reasons.append(details['audio_channels'])
-                            if details.get('video_bitrate'):
-                                reasons.append(details['video_bitrate'])
-                            if details.get('hardware_accel'):
-                                reasons.append(details['hardware_accel'])
-                            
-                            if reasons:
-                                f.write(f"Transcode Reasons: {'; '.join(reasons)}\n")
+                            # Transcode reasons (prioritizing root causes)
+                            if details.get('primary_reasons'):
+                                f.write(f"Transcode Reasons: {details['primary_reasons']}\n")
+                            elif details.get('combined'):
+                                f.write(f"Transcode Reasons: {details['combined']}\n")
                             
                             # Display FFmpeg command if available
                             if details.get('ffmpeg_command'):
@@ -922,22 +935,10 @@ class JellyfinLogAnalyzer:
                                 f.write(f"Media: {details['media']}\n")
                             
                             # DirectStream reasons (if any - usually just container/format changes)
-                            reasons = []
-                            if details.get('video_scaling'):
-                                reasons.append(details['video_scaling'])
-                            if details.get('video_codec'):
-                                reasons.append(details['video_codec'])
-                            if details.get('audio_codec'):
-                                reasons.append(details['audio_codec'])
-                            if details.get('audio_channels'):
-                                reasons.append(details['audio_channels'])
-                            if details.get('video_bitrate'):
-                                reasons.append(details['video_bitrate'])
-                            if details.get('hardware_accel'):
-                                reasons.append(details['hardware_accel'])
-                            
-                            if reasons:
-                                f.write(f"DirectStream Reasons: {'; '.join(reasons)}\n")
+                            if details.get('primary_reasons'):
+                                f.write(f"DirectStream Reasons: {details['primary_reasons']}\n")
+                            elif details.get('combined'):
+                                f.write(f"DirectStream Reasons: {details['combined']}\n")
                         
                         # Only show technical details for regular errors, not transcoding/DirectStream events
                         if event_type not in ['transcoding_event', 'directstream_event']:
