@@ -453,12 +453,12 @@ class JellyfinLogAnalyzer:
                     import os
                     session_id = os.path.basename(file_match.group(1))
             
-            # Priority 4: Use timestamp-based grouping with conservative window (2 minutes for transcoding)
+            # Priority 4: Use timestamp-based grouping with very conservative window (30 seconds for transcoding)
             if not session_id:
                 timestamp = event.get('timestamp')
                 if timestamp:
-                    # Group events within 2 minutes of each other (conservative for transcoding)
-                    session_id = f"time_{int(timestamp.timestamp() // 120)}"  # 120 seconds = 2 minutes
+                    # Group events within 30 seconds of each other (very conservative for transcoding)
+                    session_id = f"time_{int(timestamp.timestamp() // 30)}"  # 30 seconds
                 else:
                     session_id = f"unknown_{len(sessions)}"
             
@@ -493,9 +493,9 @@ class JellyfinLogAnalyzer:
             for existing_id, existing_data in merged_sessions.items():
                 existing_timestamp = existing_data['latest_timestamp']
                 
-                # Only merge if timestamps are within 30 seconds AND we have strong correlation signals
+                # Only merge if timestamps are within 15 seconds AND we have strong correlation signals
                 if (session_timestamp and existing_timestamp and 
-                    abs((session_timestamp - existing_timestamp).total_seconds()) <= 30):
+                    abs((session_timestamp - existing_timestamp).total_seconds()) <= 15):
                     
                     # Check for strong correlation signals (same file path)
                     session_has_file = any('file:' in event['entry'].message for event in session_data['events'])
@@ -551,21 +551,37 @@ class JellyfinLogAnalyzer:
             # Force event type to transcoding_event for correlated sessions
             representative_event['event_type'] = 'transcoding_event'
             
-            # Add time range information for correlated sessions
+            # Add time range information for correlated sessions (with conservative limits)
             if session_data['earliest_timestamp'] and session_data['latest_timestamp']:
-                if session_data['earliest_timestamp'] != session_data['latest_timestamp']:
+                # Calculate time difference
+                time_diff = session_data['latest_timestamp'] - session_data['earliest_timestamp']
+                
+                # If time range is more than 10 minutes, something went wrong - use single timestamp
+                if time_diff.total_seconds() > 600:  # 10 minutes
+                    # Use the most recent timestamp for overly broad ranges
+                    combined_details['time_range'] = str(session_data['latest_timestamp'])
+                elif session_data['earliest_timestamp'] != session_data['latest_timestamp']:
                     combined_details['time_range'] = f"{session_data['earliest_timestamp']} - {session_data['latest_timestamp']}"
                 else:
                     combined_details['time_range'] = str(session_data['latest_timestamp'])
             
-            # Add line range from all events in the session
+            # Add line range from all events in the session (with conservative limits)
             line_numbers = []
             for event in session_data['events']:
                 if 'line_number' in event:
                     line_numbers.append(event['line_number'])
             
             if line_numbers:
-                combined_details['line_range'] = f"{min(line_numbers)}-{max(line_numbers)}"
+                min_line = min(line_numbers)
+                max_line = max(line_numbers)
+                line_diff = max_line - min_line
+                
+                # If line range is more than 1000 lines, something went wrong - use smaller range
+                if line_diff > 1000:
+                    # Use just the first and last few lines instead of massive range
+                    combined_details['line_range'] = f"{min_line}-{min_line + 10}...{max_line - 10}-{max_line}"
+                else:
+                    combined_details['line_range'] = f"{min_line}-{max_line}"
             
             correlated_sessions.append(representative_event)
         
