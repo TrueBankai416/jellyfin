@@ -834,16 +834,18 @@ class JellyfinLogAnalyzer:
             # Special handling for transcoding events - correlate related events
             if category == 'transcoding':
                 correlated_events = self.correlate_transcoding_events(errors, verbose)
-                # For transcoding analysis, show all events unless max_errors is explicitly set to non-default
-                if max_errors_per_category == 2:  # Default value - show all transcoding events (up to 50)
-                    self.found_errors[category] = correlated_events[:50]  # Reasonable limit to prevent massive outputs
+                # For transcoding analysis, use appropriate default based on whether max_errors was explicitly set
+                if max_errors_per_category is None:  # No explicit limit - show all transcoding events (up to 50)
+                    transcoding_limit = 50
                 else:  # User explicitly set max_errors - respect their choice
-                    self.found_errors[category] = correlated_events[:max_errors_per_category]
+                    transcoding_limit = max_errors_per_category
+                self.found_errors[category] = correlated_events[:transcoding_limit]
             else:
                 # Sort by timestamp (newest first), with None timestamps at the end
                 errors.sort(key=lambda x: x['timestamp'] or datetime.min, reverse=True)
-                # Keep only the latest max_errors_per_category
-                self.found_errors[category] = errors[:max_errors_per_category]
+                # Keep only the latest max_errors_per_category (default to 2 if not specified)
+                error_limit = max_errors_per_category if max_errors_per_category is not None else 2
+                self.found_errors[category] = errors[:error_limit]
     
     def generate_report(self, output_file: str):
         """Generate a formatted report of found errors"""
@@ -1302,8 +1304,8 @@ Environment Variables (optional):
                        help='Path to log file (can be used multiple times)')
     parser.add_argument('--output', '-o',
                        help='Output file for error report (default: auto-generated based on categories)')
-    parser.add_argument('--max-errors', type=int, default=2,
-                       help='Maximum errors per category (default: 2)')
+    parser.add_argument('--max-errors', type=int, default=None,
+                       help='Maximum errors per category (default: 2 for errors, all for transcoding events)')
     parser.add_argument('--no-auto-detect', action='store_true',
                        help='Disable automatic log detection, use only specified --log-path')
     
