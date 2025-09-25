@@ -375,7 +375,7 @@ class JellyfinLogAnalyzer:
         
         return reasons
     
-    def correlate_transcoding_events(self, events: List[Dict]) -> List[Dict]:
+    def correlate_transcoding_events(self, events: List[Dict], verbose: bool = False) -> List[Dict]:
         """Correlate related transcoding events into sessions"""
         sessions = {}
         
@@ -390,9 +390,15 @@ class JellyfinLogAnalyzer:
             if item_id_match:
                 session_id = item_id_match.group(1)
             
-            # Look for media file path as fallback identifier
+            # Look for media file path as fallback identifier (handle both escaped and unescaped)
             if not session_id:
-                file_match = re.search(r'file:\\"([^"]+)\\"', entry.message)
+                # Try different file path patterns
+                file_match = re.search(r'file:\\"([^"]+)\\"', entry.message)  # JSON escaped
+                if not file_match:
+                    file_match = re.search(r'file:"([^"]+)"', entry.message)  # Regular quotes
+                if not file_match:
+                    file_match = re.search(r'file:([^"\s]+)', entry.message)  # No quotes
+                
                 if file_match:
                     # Use just the filename as session identifier
                     import os
@@ -403,9 +409,11 @@ class JellyfinLogAnalyzer:
                 timestamp = event.get('timestamp')
                 if timestamp:
                     # Group events within 60 seconds of each other (more generous for related events)
+                    # Use a more granular time window to group closely related events
                     session_id = f"time_{int(timestamp.timestamp() // 60)}"
                 else:
                     session_id = f"unknown_{len(sessions)}"
+            
             
             if session_id not in sessions:
                 sessions[session_id] = {
@@ -421,9 +429,37 @@ class JellyfinLogAnalyzer:
                 if not sessions[session_id]['latest_timestamp'] or event['timestamp'] > sessions[session_id]['latest_timestamp']:
                     sessions[session_id]['latest_timestamp'] = event['timestamp']
         
-        # Combine details from all events in each session
+        # Try to merge sessions that might be related but got different IDs
+        # Look for sessions within 60 seconds of each other that could be the same transcoding session
+        session_list = list(sessions.items())
+        merged_sessions = {}
+        
+        for session_id, session_data in session_list:
+            merged = False
+            session_timestamp = session_data['latest_timestamp']
+            
+            # Try to find an existing session this could belong to
+            for existing_id, existing_data in merged_sessions.items():
+                existing_timestamp = existing_data['latest_timestamp']
+                
+                # If timestamps are within 60 seconds, merge them
+                if (session_timestamp and existing_timestamp and 
+                    abs((session_timestamp - existing_timestamp).total_seconds()) <= 60):
+                    
+                    # Merge events
+                    existing_data['events'].extend(session_data['events'])
+                    # Update latest timestamp
+                    if session_timestamp > existing_timestamp:
+                        existing_data['latest_timestamp'] = session_timestamp
+                    merged = True
+                    break
+            
+            if not merged:
+                merged_sessions[session_id] = session_data
+        
+        # Combine details from all events in each merged session
         correlated_sessions = []
-        for session_id, session_data in sessions.items():
+        for session_id, session_data in merged_sessions.items():
             combined_details = {}
             
             # Merge details from all events in the session
@@ -594,7 +630,7 @@ class JellyfinLogAnalyzer:
         for category, errors in all_errors.items():
             # Special handling for transcoding events - correlate related events
             if category == 'transcoding':
-                correlated_events = self.correlate_transcoding_events(errors)
+                correlated_events = self.correlate_transcoding_events(errors, verbose)
                 self.found_errors[category] = correlated_events[:max_errors_per_category]
             else:
                 # Sort by timestamp (newest first), with None timestamps at the end
