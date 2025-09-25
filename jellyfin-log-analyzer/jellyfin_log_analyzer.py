@@ -478,7 +478,7 @@ class JellyfinLogAnalyzer:
                     timestamp = event.get('timestamp')
                     if timestamp:
                         # Group by session ID + 5-minute time buckets to separate distant events
-                        time_bucket = int(timestamp.timestamp() // 300)  # 300 seconds = 5 minutes
+                        time_bucket = int(timestamp.replace(tzinfo=timezone.utc).timestamp() // 300)  # 300 seconds = 5 minutes
                         session_id = f"{transcoding_details[id_field]}_{time_bucket}"
                     else:
                         session_id = transcoding_details[id_field]
@@ -501,7 +501,6 @@ class JellyfinLogAnalyzer:
                 
                 if file_match:
                     # Use just the filename as session identifier
-                    import os
                     session_id = os.path.basename(file_match.group(1))
             
             # Priority 4: Use timestamp-based grouping with very conservative window (30 seconds for transcoding)
@@ -509,7 +508,7 @@ class JellyfinLogAnalyzer:
                 timestamp = event.get('timestamp')
                 if timestamp:
                     # Group events within 30 seconds of each other (using rounding to fix bucket boundaries)
-                    session_id = f"time_{int((timestamp.timestamp() + 15) // 30)}"  # 30 seconds with rounding
+                    session_id = f"time_{int((timestamp.replace(tzinfo=timezone.utc).timestamp() + 15) // 30)}"  # 30 seconds with rounding
                 else:
                     session_id = f"unknown_{len(sessions)}"
             
