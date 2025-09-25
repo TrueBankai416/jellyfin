@@ -1,7 +1,7 @@
 JELLYFIN LOG ANALYSIS REPORT
 ==================================================
-Generated: 2025-09-25 19:14:12
-Log files analyzed: jellyfin.log
+Generated: 2025-09-25 15:16:57
+Log files analyzed: /var/log/jellyfin/jellyfin.log
 
 
 TRANSCODING
