@@ -248,11 +248,14 @@ Raw line: [2024-01-15 14:25:10.123 +00:00] [ERR] [MediaBrowser.MediaEncoding] FF
 The script works seamlessly in Docker environments:
 
 ```bash
-# From inside a Jellyfin container
-python3 jellyfin_log_analyzer.py --all
+# From a separate container with both the analyzer and Jellyfin logs mounted
+docker run --rm -v "$(pwd)/jellyfin-log-analyzer:/app" -v /path/to/jellyfin/logs:/logs -w /app python:3 python jellyfin_log_analyzer.py --all --log-path /logs
 
-# From a separate container with Jellyfin logs mounted
-docker run -v /path/to/jellyfin/logs:/logs python:3 python3 jellyfin_log_analyzer.py --all --log-path /logs
+# From inside a Jellyfin container (if you've copied the script into the container)
+python3 /path/to/jellyfin_log_analyzer.py --all
+
+# Using docker-compose to analyze logs from a Jellyfin service
+docker run --rm -v "$(pwd)/jellyfin-log-analyzer:/app" -v jellyfin_logs:/logs -w /app python:3 python jellyfin_log_analyzer.py --all --log-path /logs
 ```
 
 ## Troubleshooting

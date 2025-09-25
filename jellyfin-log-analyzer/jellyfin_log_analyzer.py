@@ -835,8 +835,8 @@ class JellyfinLogAnalyzer:
             # Special handling for transcoding events - correlate related events
             if category == 'transcoding':
                 correlated_events = self.correlate_transcoding_events(errors, verbose)
-                # For transcoding analysis, show newest 10 events (reasonable limit for output file)
-                self.found_errors[category] = correlated_events[:10]
+                # For transcoding analysis, respect max_errors_per_category setting
+                self.found_errors[category] = correlated_events[:max_errors_per_category]
             else:
                 # Sort by timestamp (newest first), with None timestamps at the end
                 errors.sort(key=lambda x: x['timestamp'] or datetime.min, reverse=True)
@@ -860,7 +860,7 @@ class JellyfinLogAnalyzer:
                     if category == 'transcoding':
                         f.write(f"\n{category.upper()}\n")  # Just "TRANSCODING" not "TRANSCODING ERRORS"
                     elif category == 'directstream':
-                        f.write(f"\nDIRECT STREAM\n")  # Just "DIRECT STREAM" not "DIRECT STREAM ERRORS"
+                        f.write(f"\nDIRECTSTREAM\n")  # Just "DIRECTSTREAM" not "DIRECTSTREAM ERRORS"
                     else:
                         f.write(f"\n{category.upper()} ERRORS\n")
                     f.write("-" * 30 + "\n")
