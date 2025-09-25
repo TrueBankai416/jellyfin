@@ -1,17 +1,7 @@
-[INFO] Running Jellyfin Log Analyzer...
-Report saved to: jellyfin_log_transcoding.txt
-
-Summary:
-  transcoding: 0 errors, 10 transcoding events
-Total: 0 errors, 10 transcoding events
-
-Detailed report saved to: jellyfin_log_transcoding.txt
-[SUCCESS] Analysis completed successfully!
-root@MSI:/home/carrigan# cat jellyfin_log_transcoding.txt
 JELLYFIN LOG ANALYSIS REPORT
 ==================================================
-Generated: 2025-09-25 14:52:48
-Log files analyzed: /var/log/jellyfin/jellyfin.log
+Generated: 2025-09-25 19:14:12
+Log files analyzed: jellyfin.log
 
 
 TRANSCODING
@@ -19,6 +9,7 @@ TRANSCODING
 
 Transcoding Event (lines 7269-7269, time 2025-09-25 04:13:25.916000):
 Play Method: Transcode (v:h264 a:direct)
+User: Media Server 7
 Session User ID: 4e08753f52384d35bca5e1ba104e2f21
 Client: Android TV
 Device: SHIELD
@@ -38,6 +29,7 @@ FFmpeg Command: \"/media/merged/Anime/TV/Strike the Blood/Season 1/Strike the Bl
 
 Transcoding Event (lines 7019-7028, time 2025-09-25 03:49:16.710000 - 2025-09-25 03:49:35.029000):
 Play Method: Transcode (v:h264 a:direct)
+User: Media Server 7
 Event Playing ID: ffa5804ae658b2e7c05dfa107da00901
 Event User ID: 4e08753f52384d35bca5e1ba104e2f21
 Event User ID Int: 1
@@ -67,6 +59,7 @@ FFmpeg Command: \"/media/merged/Anime/TV/Strike the Blood/Season 1/Strike the Bl
 
 Transcoding Event (lines 5482-5491, time 2025-09-25 02:23:46.980000 - 2025-09-25 02:24:04.826000):
 Play Method: Transcode (v:h264 a:direct)
+User: Media Server 7
 Event Playing ID: 465de9beeb0fe545a4af70f74688de13
 Event User ID: 4e08753f52384d35bca5e1ba104e2f21
 Event User ID Int: 1
@@ -87,6 +80,7 @@ FFmpeg Command: \"/media/merged/Anime/TV/Strike the Blood/Season 1/Strike the Bl
 
 Transcoding Event (lines 1858-1866, time 2025-09-25 01:46:14.765000 - 2025-09-25 01:46:32.362000):
 Play Method: Transcode (v:h264 a:direct)
+User: Media Server 7
 Event Playing ID: f3a233c9080658635ea5eee7303ad714
 Event User ID: 4e08753f52384d35bca5e1ba104e2f21
 Event User ID Int: 1

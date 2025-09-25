@@ -365,15 +365,14 @@ class JellyfinLogAnalyzer:
             
             for i in range(broad_search_start, broad_search_end):
                 sync_entry = all_entries[i]
-                if 'User Data Sync' in sync_entry.message:
-                    # Pattern: User "Username" ("UserID")
-                    username_match = re.search(r'User "([^"]+)" \("([^"]+)"\)', sync_entry.message)
-                    if username_match:
-                        username = username_match.group(1)
-                        sync_user_id = username_match.group(2)
-                        if sync_user_id == user_id:
-                            details['username'] = username
-                            break
+                # Look for User Data Sync pattern in parsed message (without "User Data Sync:" prefix)
+                username_match = re.search(r'User "([^"]+)" \("([^"]+)"\)', sync_entry.message)
+                if username_match:
+                    username = username_match.group(1)
+                    sync_user_id = username_match.group(2)
+                    if sync_user_id == user_id:
+                        details['username'] = username
+                        break
         
         return details
     
