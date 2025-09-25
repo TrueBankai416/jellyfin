@@ -316,6 +316,42 @@ class JellyfinLogAnalyzer:
         
         return details
     
+    def extract_transcoding_details_with_context(self, entry: LogEntry, all_entries: List[LogEntry], current_index: int) -> Dict[str, str]:
+        """Extract detailed transcoding information from log entry and related context lines"""
+        details = {}
+        
+        # Start with details from the current entry
+        details.update(self.extract_transcoding_details(entry))
+        
+        # Look for related lines with the same timestamp and category
+        entry_timestamp = entry.timestamp
+        entry_category = entry.category
+        
+        if entry_timestamp and entry_category:
+            # Search around the current entry for related lines (within a reasonable range)
+            search_start = max(0, current_index - 20)  # Look back up to 20 lines
+            search_end = min(len(all_entries), current_index + 20)  # Look forward up to 20 lines
+            
+            for i in range(search_start, search_end):
+                if i == current_index:
+                    continue  # Skip the current entry
+                
+                related_entry = all_entries[i]
+                
+                # Check if this entry is related (same timestamp and category)
+                if (related_entry.timestamp == entry_timestamp and 
+                    related_entry.category == entry_category):
+                    
+                    # Extract additional details from this related entry
+                    related_details = self.extract_transcoding_details(related_entry)
+                    
+                    # Merge details, but don't overwrite existing ones
+                    for key, value in related_details.items():
+                        if key not in details and value:
+                            details[key] = value
+        
+        return details
+    
     def analyze_ffmpeg_command(self, ffmpeg_cmd: str) -> Dict[str, str]:
         """Analyze FFmpeg command to determine transcode reasons"""
         reasons = {}
@@ -578,50 +614,56 @@ class JellyfinLogAnalyzer:
                 print(f"Processing: {log_path}")
             
             try:
+                # First pass: collect all entries
+                all_entries = []
                 with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
                     for line_num, line in enumerate(f, 1):
                         entry = self.parse_log_line(line)
-                        
                         if entry:
-                            # Check for regular errors
-                            if self.is_error_line(entry):
-                                error_categories = self.categorize_error(entry, categories)
-                                
-                                for category in error_categories:
-                                    error_info = {
-                                        'entry': entry,
-                                        'file': log_path,
-                                        'line_number': line_num,
-                                        'timestamp': self.parse_timestamp(entry),
-                                        'event_type': 'error'
-                                    }
-                                    all_errors[category].append(error_info)
-                            
-                            # Special handling for transcoding events (if transcoding category is selected)
-                            elif 'transcoding' in categories and self.is_transcoding_event(entry):
-                                transcoding_details = self.extract_transcoding_details(entry)
-                                error_info = {
-                                    'entry': entry,
-                                    'file': log_path,
-                                    'line_number': line_num,
-                                    'timestamp': self.parse_timestamp(entry),
-                                    'event_type': 'transcoding_event',
-                                    'transcoding_details': transcoding_details
-                                }
-                                all_errors['transcoding'].append(error_info)
-                            
-                            # Special handling for DirectStream events (if directstream category is selected)
-                            elif 'directstream' in categories and self.is_directstream_event(entry):
-                                directstream_details = self.extract_transcoding_details(entry)  # Reuse same extraction logic
-                                error_info = {
-                                    'entry': entry,
-                                    'file': log_path,
-                                    'line_number': line_num,
-                                    'timestamp': self.parse_timestamp(entry),
-                                    'event_type': 'directstream_event',
-                                    'directstream_details': directstream_details
-                                }
-                                all_errors['directstream'].append(error_info)
+                            all_entries.append((entry, line_num))
+                
+                # Second pass: process entries with context
+                for i, (entry, line_num) in enumerate(all_entries):
+                    # Check for regular errors
+                    if self.is_error_line(entry):
+                        error_categories = self.categorize_error(entry, categories)
+                        
+                        for category in error_categories:
+                            error_info = {
+                                'entry': entry,
+                                'file': log_path,
+                                'line_number': line_num,
+                                'timestamp': self.parse_timestamp(entry),
+                                'event_type': 'error'
+                            }
+                            all_errors[category].append(error_info)
+                    
+                    # Special handling for transcoding events (if transcoding category is selected)
+                    elif 'transcoding' in categories and self.is_transcoding_event(entry):
+                        # Extract details from this entry and look for related context lines
+                        transcoding_details = self.extract_transcoding_details_with_context(entry, [e[0] for e in all_entries], i)
+                        error_info = {
+                            'entry': entry,
+                            'file': log_path,
+                            'line_number': line_num,
+                            'timestamp': self.parse_timestamp(entry),
+                            'event_type': 'transcoding_event',
+                            'transcoding_details': transcoding_details
+                        }
+                        all_errors['transcoding'].append(error_info)
+                    
+                    # Special handling for DirectStream events (if directstream category is selected)
+                    elif 'directstream' in categories and self.is_directstream_event(entry):
+                        directstream_details = self.extract_transcoding_details(entry)  # Reuse same extraction logic
+                        error_info = {
+                            'entry': entry,
+                            'file': log_path,
+                            'line_number': line_num,
+                            'timestamp': self.parse_timestamp(entry),
+                            'event_type': 'directstream_event',
+                            'directstream_details': directstream_details
+                        }
+                        all_errors['directstream'].append(error_info)
             
             except Exception as e:
                 print(f"Error reading {log_path}: {e}")
