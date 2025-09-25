@@ -40,23 +40,28 @@ A comprehensive script to analyze Jellyfin logs and extract different types of e
 
 ### Download
 
-1. Download all files to a directory:
-   - `jellyfin_log_analyzer.py` (main script)
-   - `jellyfin_log_analyzer.bat` (Windows wrapper)
-   - `jellyfin_log_analyzer.sh` (Linux wrapper)
-
-2. Make the Linux script executable:
+1. Clone or download this repository
+2. Navigate to the `jellyfin-log-analyzer` folder:
+   ```bash
+   cd jellyfin-log-analyzer
+   ```
+3. Make the Linux script executable:
    ```bash
    chmod +x jellyfin_log_analyzer.sh
    ```
 
 ## Usage
 
+**Note**: All commands should be run from within the `jellyfin-log-analyzer` folder.
+
 ### Windows
 
 Use the batch file wrapper for the easiest experience:
 
 ```cmd
+# Navigate to the folder first
+cd jellyfin-log-analyzer
+
 # Show help and examples
 jellyfin_log_analyzer.bat
 
@@ -78,6 +83,9 @@ jellyfin_log_analyzer.bat --all --output my_errors.txt
 Use the shell script wrapper:
 
 ```bash
+# Navigate to the folder first
+cd jellyfin-log-analyzer
+
 # Show help and examples
 ./jellyfin_log_analyzer.sh
 
@@ -99,6 +107,9 @@ sudo ./jellyfin_log_analyzer.sh --all
 You can also run the Python script directly:
 
 ```bash
+# Navigate to the folder first
+cd jellyfin-log-analyzer
+
 # Linux/macOS
 python3 jellyfin_log_analyzer.py --all
 
