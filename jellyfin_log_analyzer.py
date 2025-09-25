@@ -791,8 +791,8 @@ class JellyfinLogAnalyzer:
             # Special handling for transcoding events - correlate related events
             if category == 'transcoding':
                 correlated_events = self.correlate_transcoding_events(errors, verbose)
-                # For transcoding analysis, show all events (not limited to max_errors_per_category)
-                self.found_errors[category] = correlated_events
+                # For transcoding analysis, show newest 10 events (reasonable limit for output file)
+                self.found_errors[category] = correlated_events[:10]
             else:
                 # Sort by timestamp (newest first), with None timestamps at the end
                 errors.sort(key=lambda x: x['timestamp'] or datetime.min, reverse=True)
