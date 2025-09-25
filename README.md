@@ -15,6 +15,7 @@ A comprehensive script to analyze Jellyfin logs and extract different types of e
 
 - **Networking**: Connection timeouts, DNS issues, network failures, SSL problems
 - **Transcoding**: FFmpeg errors, codec issues, hardware acceleration problems, plus detailed transcoding analysis with play methods, users, clients, and transcode reasons
+- **DirectStream**: Container remuxing events, format conversion without transcoding
 - **Playback**: Stream failures, format issues, seeking problems, buffer issues
 - **Authentication**: Login failures, token issues, authorization problems
 - **Database**: SQLite errors, corruption, migration issues
@@ -122,6 +123,7 @@ python jellyfin_log_analyzer.py --all
 ### Error Categories
 - `--networking`: Scan for networking errors
 - `--transcoding`: Scan for transcoding errors
+- `--directstream`: Scan for DirectStream events
 - `--playback`: Scan for playback errors
 - `--authentication`: Scan for authentication errors
 - `--database`: Scan for database errors
@@ -229,17 +231,19 @@ JELLYFIN LOG ANALYSIS REPORT
 Generated: 2024-01-15 14:30:22
 Log files analyzed: /var/log/jellyfin/jellyfin.log
 
-TRANSCODING ERRORS
+TRANSCODING
 ------------------------------
 
-Error #1:
-File: /var/log/jellyfin/jellyfin.log
-Line: 1234
-Timestamp: 2024-01-15 14:25:10.123
-Level: Error
-Category: MediaBrowser.MediaEncoding
-Message: FFmpeg exited with code 1
-Raw line: [2024-01-15 14:25:10.123 +00:00] [ERR] [MediaBrowser.MediaEncoding] FFmpeg exited with code 1
+Transcoding Event (lines 1234-1234, time 2024-01-15 14:25:10.123000):
+Play Method: Transcode (v:h264 a:direct)
+User: Media Server 7
+Event User ID: 4e08753f52384d35bca5e1ba104e2f21
+Client: Android TV
+Device: SHIELD
+Media: Example Movie - s01e01 - Episode Title
+Item ID: 489af7db3b5678576a9f7682ea71b001
+Item Type: Episode
+Transcode Reasons: Burning ASS subtitles into video stream; Client requires H.264 video codec; Bandwidth limited to 5803 kbps
 --------------------------------------------------
 ```
 
