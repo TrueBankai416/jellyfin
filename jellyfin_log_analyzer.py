@@ -427,10 +427,17 @@ class JellyfinLogAnalyzer:
             # Try to extract session/item identifier with priority order
             session_id = None
             
-            # Priority 1: Use session/event IDs from transcoding details
+            # Priority 1: Use session/event IDs from transcoding details with time-based grouping
             for id_field in ['event_playing_id', 'session_playing_id', 'item_id']:
                 if transcoding_details.get(id_field):
-                    session_id = transcoding_details[id_field]
+                    # Add timestamp to session ID to prevent merging events hours apart
+                    timestamp = event.get('timestamp')
+                    if timestamp:
+                        # Group by session ID + 5-minute time buckets to separate distant events
+                        time_bucket = int(timestamp.timestamp() // 300)  # 300 seconds = 5 minutes
+                        session_id = f"{transcoding_details[id_field]}_{time_bucket}"
+                    else:
+                        session_id = transcoding_details[id_field]
                     break
             
             # Priority 2: Look for IDs in the message
@@ -538,7 +545,7 @@ class JellyfinLogAnalyzer:
                         should_merge = True
                     
                     elif session_has_id and existing_has_id:
-                        # Both have session IDs - check if they match
+                        # Both have session IDs - check if they match AND are close in time
                         session_ids = set()
                         existing_ids = set()
                         
@@ -554,9 +561,11 @@ class JellyfinLogAnalyzer:
                                 if details.get(id_field):
                                     existing_ids.add(details[id_field])
                         
-                        # Merge if they share any session ID
+                        # Only merge if they share session ID AND are within 5 minutes (not hours apart)
                         if session_ids & existing_ids:
-                            should_merge = True
+                            time_diff = abs((session_timestamp - existing_timestamp).total_seconds())
+                            if time_diff <= 300:  # 5 minutes max for same session ID
+                                should_merge = True
                     
                     if should_merge:
                         existing_data['events'].extend(session_data['events'])
@@ -782,7 +791,8 @@ class JellyfinLogAnalyzer:
             # Special handling for transcoding events - correlate related events
             if category == 'transcoding':
                 correlated_events = self.correlate_transcoding_events(errors, verbose)
-                self.found_errors[category] = correlated_events[:max_errors_per_category]
+                # For transcoding analysis, show all events (not limited to max_errors_per_category)
+                self.found_errors[category] = correlated_events
             else:
                 # Sort by timestamp (newest first), with None timestamps at the end
                 errors.sort(key=lambda x: x['timestamp'] or datetime.min, reverse=True)
