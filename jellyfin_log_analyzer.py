@@ -273,41 +273,30 @@ class JellyfinLogAnalyzer:
         details = {}
         message = entry.message
         
-        # Extract play method - handle various formats
-        play_method_match = re.search(r'(?:PlayMethod|Play\s*method|play_method)\s*[:=]\s*"([^"]+)"', message, re.IGNORECASE)
-        if play_method_match:
-            details['play_method'] = play_method_match.group(1)
+        # Extract all the specific fields the user requested
+        field_patterns = {
+            'event_playing_id': r'event_playing_id\s*[:=]\s*"([^"]+)"',
+            'event_user_id': r'event_user_id\s*[:=]\s*"([^"]+)"',
+            'event_user_id_int': r'event_user_id_int\s*[:=]\s*(\d+)',
+            'session_playing_id': r'session_playing_id\s*[:=]\s*"([^"]+)"',
+            'session_user_id': r'session_user_id\s*[:=]\s*"([^"]+)"',
+            'play_method': r'(?:PlayMethod|Play\s*method|play_method)\s*[:=]\s*"([^"]+)"',
+            'client': r'(?:e\.)?ClientName\s*[:=]\s*"([^"]+)"',
+            'device': r'(?:e\.)?DeviceName\s*[:=]\s*"([^"]+)"',
+            'media': r'(?:e\.)?ItemName\s*[:=]\s*"([^"]+)"',
+            'item_id': r'(?:e\.)?ItemId\s*[:=]\s*"([^"]+)"',
+            'item_type': r'(?:e\.)?ItemType\s*[:=]\s*"([^"]+)"',
+        }
         
-        # Extract user information - handle various formats including e.-prefixed
-        user_match = re.search(r'(?:e\.)?(?:User(?:Name)?|event_user_id)\s*[:=]\s*"([^"]+)"', message, re.IGNORECASE)
-        if not user_match:
-            user_match = re.search(r'User "([^"]+)"', message)
-        if not user_match:
-            # Look for user in the full log context (might be in previous lines)
-            user_match = re.search(r'(?:e\.)?(?:User(?:Name)?|event_user_id)\s*[:=]\s*"([^"]+)"', entry.raw_line, re.IGNORECASE)
-        if user_match:
-            # For event_user_id, we need to map it to a user name (but we'll use the ID for now)
-            user_id = user_match.group(1)
-            if 'event_user_id' in user_match.group(0).lower():
-                # This is a user ID, we could map it to a name but for now use a placeholder
-                details['user'] = f"User ID: {user_id}"
-            else:
-                details['user'] = user_id
+        # Extract all fields using patterns
+        for field_name, pattern in field_patterns.items():
+            match = re.search(pattern, message, re.IGNORECASE)
+            if match:
+                details[field_name] = match.group(1)
         
-        # Extract client information - handle with/without e. prefix
-        client_match = re.search(r'(?:e\.)?ClientName\s*[:=]\s*"([^"]+)"', message, re.IGNORECASE)
-        if client_match:
-            details['client'] = client_match.group(1)
-        
-        # Extract device information - handle with/without e. prefix
-        device_match = re.search(r'(?:e\.)?DeviceName\s*[:=]\s*"([^"]+)"', message, re.IGNORECASE)
-        if device_match:
-            details['device'] = device_match.group(1)
-        
-        # Extract media information - handle e.-prefixed ItemName
-        item_match = re.search(r'(?:e\.)?ItemName\s*=\s*"([^"]+)"', message)
-        if item_match:
-            details['media'] = item_match.group(1)
+        # Legacy user extraction for backward compatibility
+        if 'event_user_id' in details and 'user' not in details:
+            details['user'] = f"User ID: {details['event_user_id']}"
         
         # Extract FFmpeg command and analyze transcode reasons
         if 'ffmpeg' in message.lower() or 'ffmpeg' in entry.category.lower():
@@ -319,28 +308,25 @@ class JellyfinLogAnalyzer:
     def extract_transcoding_details_with_context(self, entry: LogEntry, all_entries: List[LogEntry], current_index: int) -> Dict[str, str]:
         """Extract detailed transcoding information from log entry and related context lines"""
         details = {}
+        line_numbers = []
         
         # Start with details from the current entry
         details.update(self.extract_transcoding_details(entry))
         
-        # Look for related lines with the same timestamp and category
+        # Look for related lines with the same timestamp (relaxed from same timestamp + category)
         entry_timestamp = entry.timestamp
-        entry_category = entry.category
         
-        if entry_timestamp and entry_category:
+        if entry_timestamp:
             # Search around the current entry for related lines (within a reasonable range)
             search_start = max(0, current_index - 20)  # Look back up to 20 lines
             search_end = min(len(all_entries), current_index + 20)  # Look forward up to 20 lines
             
             for i in range(search_start, search_end):
-                if i == current_index:
-                    continue  # Skip the current entry
-                
                 related_entry = all_entries[i]
                 
-                # Check if this entry is related (same timestamp and category)
-                if (related_entry.timestamp == entry_timestamp and 
-                    related_entry.category == entry_category):
+                # Check if this entry is related (same timestamp)
+                if related_entry.timestamp == entry_timestamp:
+                    line_numbers.append(i + 1)  # Line numbers are 1-based
                     
                     # Extract additional details from this related entry
                     related_details = self.extract_transcoding_details(related_entry)
@@ -349,6 +335,25 @@ class JellyfinLogAnalyzer:
                     for key, value in related_details.items():
                         if key not in details and value:
                             details[key] = value
+        
+        # Add line range and time range information
+        if line_numbers:
+            details['line_range'] = f"{min(line_numbers)}-{max(line_numbers)}"
+            
+            # Also track time range from related entries
+            timestamps = []
+            for i in range(search_start, search_end):
+                related_entry = all_entries[i]
+                if related_entry.timestamp == entry_timestamp:
+                    timestamps.append(related_entry.timestamp)
+            
+            if timestamps:
+                # All timestamps should be the same, but let's be safe
+                unique_timestamps = list(set(timestamps))
+                if len(unique_timestamps) == 1:
+                    details['time_range'] = unique_timestamps[0]
+                else:
+                    details['time_range'] = f"{min(unique_timestamps)} - {max(unique_timestamps)}"
         
         return details
     
@@ -712,7 +717,21 @@ class JellyfinLogAnalyzer:
                         
                         # Simplified format for transcoding and DirectStream events
                         if event_type == 'transcoding_event':
-                            f.write(f"\nTranscoding Event:\n")
+                            # Include line range and time range if available
+                            details = error_info.get('transcoding_details', {})
+                            line_range = details.get('line_range', '')
+                            time_range = details.get('time_range', '')
+                            
+                            header_parts = []
+                            if line_range:
+                                header_parts.append(f"lines {line_range}")
+                            if time_range:
+                                header_parts.append(f"time {time_range}")
+                            
+                            if header_parts:
+                                f.write(f"\nTranscoding Event ({', '.join(header_parts)}):\n")
+                            else:
+                                f.write(f"\nTranscoding Event:\n")
                         elif event_type == 'directstream_event':
                             f.write(f"\nDirectStream Event:\n")
                         else:
@@ -723,20 +742,33 @@ class JellyfinLogAnalyzer:
                             f.write(f"Level: {entry.level}\n")
                             f.write(f"Category: {entry.category}\n")
                         
-                        # Enhanced transcoding information
+                        # Enhanced transcoding information with all requested fields
                         if event_type == 'transcoding_event' and 'transcoding_details' in error_info:
                             details = error_info['transcoding_details']
                             
-                            if details.get('play_method'):
-                                f.write(f"Play Method: {details['play_method']}\n")
-                            if details.get('user'):
+                            # Display all the specific fields the user requested
+                            field_display_names = {
+                                'play_method': 'Play Method',
+                                'event_playing_id': 'Event Playing ID',
+                                'event_user_id': 'Event User ID',
+                                'event_user_id_int': 'Event User ID Int',
+                                'session_playing_id': 'Session Playing ID',
+                                'session_user_id': 'Session User ID',
+                                'client': 'Client',
+                                'device': 'Device',
+                                'media': 'Media',
+                                'item_id': 'Item ID',
+                                'item_type': 'Item Type',
+                            }
+                            
+                            # Display fields in the order requested by user
+                            for field_key, display_name in field_display_names.items():
+                                if details.get(field_key):
+                                    f.write(f"{display_name}: {details[field_key]}\n")
+                            
+                            # Legacy user field for backward compatibility
+                            if details.get('user') and not details.get('event_user_id'):
                                 f.write(f"User: {details['user']}\n")
-                            if details.get('client'):
-                                f.write(f"Client: {details['client']}\n")
-                            if details.get('device'):
-                                f.write(f"Device: {details['device']}\n")
-                            if details.get('media'):
-                                f.write(f"Media: {details['media']}\n")
                             
                             # Transcode reasons
                             reasons = []
