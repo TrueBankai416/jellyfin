@@ -232,6 +232,7 @@ class JellyfinLogAnalyzer:
             r"(?:h264_nvenc|libx264|hevc_nvenc|libx265)",  # Video encoders indicate transcoding
             r"started.*transcod",
             r"transcod.*start",
+            r"StartPlaybackTimer\s*:\s*(?:event_|session_)",  # StartPlaybackTimer data lines
         ]
         
         full_text = f"{entry.message} {entry.category}".lower()
@@ -354,6 +355,25 @@ class JellyfinLogAnalyzer:
                     details['time_range'] = unique_timestamps[0]
                 else:
                     details['time_range'] = f"{min(unique_timestamps)} - {max(unique_timestamps)}"
+        
+        # Extract username from User Data Sync lines (search broader context)
+        user_id = details.get('event_user_id') or details.get('session_user_id')
+        if user_id and not details.get('username'):
+            # Search broader context for User Data Sync lines (up to 1000 lines before/after)
+            broad_search_start = max(0, current_index - 1000)
+            broad_search_end = min(len(all_entries), current_index + 1000)
+            
+            for i in range(broad_search_start, broad_search_end):
+                sync_entry = all_entries[i]
+                if 'User Data Sync' in sync_entry.message:
+                    # Pattern: User "Username" ("UserID")
+                    username_match = re.search(r'User "([^"]+)" \("([^"]+)"\)', sync_entry.message)
+                    if username_match:
+                        username = username_match.group(1)
+                        sync_user_id = username_match.group(2)
+                        if sync_user_id == user_id:
+                            details['username'] = username
+                            break
         
         return details
     
@@ -888,6 +908,7 @@ class JellyfinLogAnalyzer:
                             # Display all the specific fields the user requested
                             field_display_names = {
                                 'play_method': 'Play Method',
+                                'username': 'User',
                                 'event_playing_id': 'Event Playing ID',
                                 'event_user_id': 'Event User ID',
                                 'event_user_id_int': 'Event User ID Int',
