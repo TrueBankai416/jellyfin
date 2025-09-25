@@ -457,8 +457,8 @@ class JellyfinLogAnalyzer:
             if not session_id:
                 timestamp = event.get('timestamp')
                 if timestamp:
-                    # Group events within 30 seconds of each other (very conservative for transcoding)
-                    session_id = f"time_{int(timestamp.timestamp() // 30)}"  # 30 seconds
+                    # Group events within 30 seconds of each other (using rounding to fix bucket boundaries)
+                    session_id = f"time_{int((timestamp.timestamp() + 15) // 30)}"  # 30 seconds with rounding
                 else:
                     session_id = f"unknown_{len(sessions)}"
             
@@ -493,40 +493,79 @@ class JellyfinLogAnalyzer:
             for existing_id, existing_data in merged_sessions.items():
                 existing_timestamp = existing_data['latest_timestamp']
                 
-                # Only merge if timestamps are within 15 seconds AND we have strong correlation signals
+                # Only merge if timestamps are within 30 seconds AND we have strong correlation signals
                 if (session_timestamp and existing_timestamp and 
-                    abs((session_timestamp - existing_timestamp).total_seconds()) <= 15):
+                    abs((session_timestamp - existing_timestamp).total_seconds()) <= 30):
                     
-                    # Check for strong correlation signals (same file path)
+                    # Check for correlation signals (file paths or session IDs)
                     session_has_file = any('file:' in event['entry'].message for event in session_data['events'])
                     existing_has_file = any('file:' in event['entry'].message for event in existing_data['events'])
                     
-                    # Only merge if both have file paths and they're likely the same session
+                    # Check for session ID correlation
+                    session_has_id = any(event.get('transcoding_details', {}).get('event_playing_id') for event in session_data['events'])
+                    existing_has_id = any(event.get('transcoding_details', {}).get('event_playing_id') for event in existing_data['events'])
+                    
+                    # Merge if: both have file paths OR one has file path and other has session ID (FFmpeg + StartPlaybackTimer case)
+                    should_merge = False
+                    
+                    # Helper function for cross-platform basename extraction
+                    def _basename_any_os(path):
+                        import re
+                        return re.split(r'[\\/]', path)[-1]
+                    
                     if session_has_file and existing_has_file:
-                        # Extract file paths to compare
+                        # Extract file paths to compare (both have file paths)
                         session_files = set()
                         existing_files = set()
                         
                         for event in session_data['events']:
                             file_match = re.search(r'file:["\']?([^"\']+)["\']?', event['entry'].message)
                             if file_match:
-                                import os
-                                session_files.add(os.path.basename(file_match.group(1)))
+                                session_files.add(_basename_any_os(file_match.group(1)))
                         
                         for event in existing_data['events']:
                             file_match = re.search(r'file:["\']?([^"\']+)["\']?', event['entry'].message)
                             if file_match:
-                                existing_files.add(os.path.basename(file_match.group(1)))
+                                existing_files.add(_basename_any_os(file_match.group(1)))
                         
-                        # Only merge if they share the same file
+                        # Merge if they share the same file
                         if session_files & existing_files:  # Intersection check
-                            existing_data['events'].extend(session_data['events'])
-                            if session_timestamp > existing_timestamp:
-                                existing_data['latest_timestamp'] = session_timestamp
-                            if session_data['earliest_timestamp'] < existing_data['earliest_timestamp']:
-                                existing_data['earliest_timestamp'] = session_data['earliest_timestamp']
-                            merged = True
-                            break
+                            should_merge = True
+                    
+                    elif (session_has_file and existing_has_id) or (existing_has_file and session_has_id):
+                        # One has file path, other has session ID (FFmpeg + StartPlaybackTimer case)
+                        # This is common and should be merged if they're close in time
+                        should_merge = True
+                    
+                    elif session_has_id and existing_has_id:
+                        # Both have session IDs - check if they match
+                        session_ids = set()
+                        existing_ids = set()
+                        
+                        for event in session_data['events']:
+                            details = event.get('transcoding_details', {})
+                            for id_field in ['event_playing_id', 'session_playing_id', 'item_id']:
+                                if details.get(id_field):
+                                    session_ids.add(details[id_field])
+                        
+                        for event in existing_data['events']:
+                            details = event.get('transcoding_details', {})
+                            for id_field in ['event_playing_id', 'session_playing_id', 'item_id']:
+                                if details.get(id_field):
+                                    existing_ids.add(details[id_field])
+                        
+                        # Merge if they share any session ID
+                        if session_ids & existing_ids:
+                            should_merge = True
+                    
+                    if should_merge:
+                        existing_data['events'].extend(session_data['events'])
+                        if session_timestamp > existing_timestamp:
+                            existing_data['latest_timestamp'] = session_timestamp
+                        if session_data['earliest_timestamp'] < existing_data['earliest_timestamp']:
+                            existing_data['earliest_timestamp'] = session_data['earliest_timestamp']
+                        merged = True
+                        break
             
             if not merged:
                 merged_sessions[session_id] = session_data
