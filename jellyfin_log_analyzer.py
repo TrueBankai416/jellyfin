@@ -417,21 +417,29 @@ class JellyfinLogAnalyzer:
         return reasons
     
     def correlate_transcoding_events(self, events: List[Dict], verbose: bool = False) -> List[Dict]:
-        """Correlate related transcoding events into sessions"""
+        """Correlate related transcoding events into sessions using improved logic"""
         sessions = {}
         
         for event in events:
             entry = event['entry']
+            transcoding_details = event.get('transcoding_details', {})
             
-            # Try to extract session/item identifier
+            # Try to extract session/item identifier with priority order
             session_id = None
             
-            # Look for ItemId or playing_id in the message
-            item_id_match = re.search(r'(?:ItemId|playing_id|event_playing_id)\s*=\s*"([^"]+)"', entry.message)
-            if item_id_match:
-                session_id = item_id_match.group(1)
+            # Priority 1: Use session/event IDs from transcoding details
+            for id_field in ['event_playing_id', 'session_playing_id', 'item_id']:
+                if transcoding_details.get(id_field):
+                    session_id = transcoding_details[id_field]
+                    break
             
-            # Look for media file path as fallback identifier (handle both escaped and unescaped)
+            # Priority 2: Look for IDs in the message
+            if not session_id:
+                item_id_match = re.search(r'(?:ItemId|playing_id|event_playing_id|session_playing_id)\s*=\s*"([^"]+)"', entry.message)
+                if item_id_match:
+                    session_id = item_id_match.group(1)
+            
+            # Priority 3: Look for media file path as fallback identifier
             if not session_id:
                 # Try different file path patterns
                 file_match = re.search(r'file:\\"([^"]+)\\"', entry.message)  # JSON escaped
@@ -445,30 +453,32 @@ class JellyfinLogAnalyzer:
                     import os
                     session_id = os.path.basename(file_match.group(1))
             
-            # If no session ID found, use timestamp-based grouping (events within 60 seconds)
+            # Priority 4: Use timestamp-based grouping with wider window (5 minutes for transcoding)
             if not session_id:
                 timestamp = event.get('timestamp')
                 if timestamp:
-                    # Group events within 60 seconds of each other (more generous for related events)
-                    # Use a more granular time window to group closely related events
-                    session_id = f"time_{int(timestamp.timestamp() // 60)}"
+                    # Group events within 5 minutes of each other (much more generous for transcoding)
+                    session_id = f"time_{int(timestamp.timestamp() // 300)}"  # 300 seconds = 5 minutes
                 else:
                     session_id = f"unknown_{len(sessions)}"
-            
             
             if session_id not in sessions:
                 sessions[session_id] = {
                     'events': [],
                     'combined_details': {},
-                    'latest_timestamp': None
+                    'latest_timestamp': None,
+                    'earliest_timestamp': None
                 }
             
             sessions[session_id]['events'].append(event)
             
-            # Update latest timestamp
-            if event.get('timestamp'):
-                if not sessions[session_id]['latest_timestamp'] or event['timestamp'] > sessions[session_id]['latest_timestamp']:
-                    sessions[session_id]['latest_timestamp'] = event['timestamp']
+            # Update timestamp range
+            event_timestamp = event.get('timestamp')
+            if event_timestamp:
+                if not sessions[session_id]['latest_timestamp'] or event_timestamp > sessions[session_id]['latest_timestamp']:
+                    sessions[session_id]['latest_timestamp'] = event_timestamp
+                if not sessions[session_id]['earliest_timestamp'] or event_timestamp < sessions[session_id]['earliest_timestamp']:
+                    sessions[session_id]['earliest_timestamp'] = event_timestamp
         
         # Try to merge sessions that might be related but got different IDs
         # Look for sessions within 60 seconds of each other that could be the same transcoding session
@@ -517,6 +527,22 @@ class JellyfinLogAnalyzer:
             representative_event['session_id'] = session_id
             # Force event type to transcoding_event for correlated sessions
             representative_event['event_type'] = 'transcoding_event'
+            
+            # Add time range information for correlated sessions
+            if session_data['earliest_timestamp'] and session_data['latest_timestamp']:
+                if session_data['earliest_timestamp'] != session_data['latest_timestamp']:
+                    combined_details['time_range'] = f"{session_data['earliest_timestamp']} - {session_data['latest_timestamp']}"
+                else:
+                    combined_details['time_range'] = str(session_data['latest_timestamp'])
+            
+            # Add line range from all events in the session
+            line_numbers = []
+            for event in session_data['events']:
+                if 'line_number' in event:
+                    line_numbers.append(event['line_number'])
+            
+            if line_numbers:
+                combined_details['line_range'] = f"{min(line_numbers)}-{max(line_numbers)}"
             
             correlated_sessions.append(representative_event)
         
@@ -787,6 +813,10 @@ class JellyfinLogAnalyzer:
                             
                             if reasons:
                                 f.write(f"Transcode Reasons: {'; '.join(reasons)}\n")
+                            
+                            # Display FFmpeg command if available
+                            if details.get('ffmpeg_command'):
+                                f.write(f"FFmpeg Command: {details['ffmpeg_command']}\n")
                         
                         # Enhanced DirectStream information
                         elif event_type == 'directstream_event' and 'directstream_details' in error_info:
