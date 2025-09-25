@@ -1,0 +1,24 @@
+JELLYFIN LOG ANALYSIS REPORT
+==================================================
+Generated: 2025-09-25 15:46:37
+Log files analyzed: /var/log/jellyfin/jellyfin.log
+
+
+TRANSCODING
+------------------------------
+
+Transcoding Event (lines 7269-7269, time 2025-09-25 04:13:25.916000):
+Play Method: Transcode (v:h264 a:direct)
+User: Media Server 7
+Session User ID: 4e08753f52384d35bca5e1ba104e2f21
+Client: Android TV
+Device: SHIELD
+Media: Strike the Blood - s01e16 - Fiesta for the Observers I
+Item ID: 489af7db3b5678576a9f7682ea71b001
+Item Type: Episode
+--------------------------------------------------
+
+Transcoding Event (lines 7262-7262, time 2025-09-25 04:13:07.550000):
+Transcode Reasons: Burning ASS subtitles into video stream; Client requires H.264 video codec; Bandwidth limited to 5803 kbps
+FFmpeg Command: 0 -filter_hw_device cu -hwaccel cuda -hwaccel_output_format cuda -noautorotate -hwaccel_flags +unsafe_output -threads 1 -i file:\"/media/merged/Anime/TV/Strike the Blood/Season 1/Strike the Blood - S01E16 - Fiesta for the Observers I.mkv\" -noautoscale -map_metadata -1 -map_chapters -1 -threads 0 -map 0:0 -map 0:1 -map -0:0 -codec:v:0 h264_nvenc -preset p1 -b:v 5803263 -maxrate 5803263 -bufsize 11606526 -profile:v:0 high -g:v:0 90 -keyint_min:v:0 90 -filter_complex \"alphasrc=s=1920x1080:r=30:start='0',format=yuva420p,subtitles=f='/var/lib/jellyfin/data/subtitles/a/a82404c1-4b37-78b1-493b-fd23f68d3397.ass':alpha=1:sub2video=1:fontsdir='/var/cache/jellyfin/attachments/489af7db3b5678576a9f7682ea71b001',hwupload=derive_device=cuda[sub];[0:0]setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709,scale_cuda=format=yuv420p[main];[main][sub]overlay_cuda=eof_action=pass:repeatlast=0\" -start_at_zero -codec:a:0 copy -copyts -avoid_negative_ts disabled -max_muxing_queue_size 2048 -f hls -max_delay 5000000 -hls_time 3 -hls_segment_type mpegts -start_number 0 -hls_segment_filename \"/var/lib/jellyfin/transcodes/e43de7b78deb5b04570296fa3b027ccd%d.ts\" -hls_playlist_type vod -hls_list_size 0 -y \"/var/lib/jellyfin/transcodes/e43de7b78deb5b04570296fa3b027ccd.m3u8\""
+--------------------------------------------------
