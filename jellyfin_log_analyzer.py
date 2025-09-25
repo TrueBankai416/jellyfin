@@ -453,12 +453,12 @@ class JellyfinLogAnalyzer:
                     import os
                     session_id = os.path.basename(file_match.group(1))
             
-            # Priority 4: Use timestamp-based grouping with wider window (5 minutes for transcoding)
+            # Priority 4: Use timestamp-based grouping with conservative window (2 minutes for transcoding)
             if not session_id:
                 timestamp = event.get('timestamp')
                 if timestamp:
-                    # Group events within 5 minutes of each other (much more generous for transcoding)
-                    session_id = f"time_{int(timestamp.timestamp() // 300)}"  # 300 seconds = 5 minutes
+                    # Group events within 2 minutes of each other (conservative for transcoding)
+                    session_id = f"time_{int(timestamp.timestamp() // 120)}"  # 120 seconds = 2 minutes
                 else:
                     session_id = f"unknown_{len(sessions)}"
             
@@ -481,7 +481,7 @@ class JellyfinLogAnalyzer:
                     sessions[session_id]['earliest_timestamp'] = event_timestamp
         
         # Try to merge sessions that might be related but got different IDs
-        # Look for sessions within 60 seconds of each other that could be the same transcoding session
+        # Only merge sessions with strong correlation signals (same file path or very close timing)
         session_list = list(sessions.items())
         merged_sessions = {}
         
@@ -489,21 +489,44 @@ class JellyfinLogAnalyzer:
             merged = False
             session_timestamp = session_data['latest_timestamp']
             
-            # Try to find an existing session this could belong to
+            # Only merge if we have strong indicators they're the same session
             for existing_id, existing_data in merged_sessions.items():
                 existing_timestamp = existing_data['latest_timestamp']
                 
-                # If timestamps are within 60 seconds, merge them
+                # Only merge if timestamps are within 30 seconds AND we have strong correlation signals
                 if (session_timestamp and existing_timestamp and 
-                    abs((session_timestamp - existing_timestamp).total_seconds()) <= 60):
+                    abs((session_timestamp - existing_timestamp).total_seconds()) <= 30):
                     
-                    # Merge events
-                    existing_data['events'].extend(session_data['events'])
-                    # Update latest timestamp
-                    if session_timestamp > existing_timestamp:
-                        existing_data['latest_timestamp'] = session_timestamp
-                    merged = True
-                    break
+                    # Check for strong correlation signals (same file path)
+                    session_has_file = any('file:' in event['entry'].message for event in session_data['events'])
+                    existing_has_file = any('file:' in event['entry'].message for event in existing_data['events'])
+                    
+                    # Only merge if both have file paths and they're likely the same session
+                    if session_has_file and existing_has_file:
+                        # Extract file paths to compare
+                        session_files = set()
+                        existing_files = set()
+                        
+                        for event in session_data['events']:
+                            file_match = re.search(r'file:["\']?([^"\']+)["\']?', event['entry'].message)
+                            if file_match:
+                                import os
+                                session_files.add(os.path.basename(file_match.group(1)))
+                        
+                        for event in existing_data['events']:
+                            file_match = re.search(r'file:["\']?([^"\']+)["\']?', event['entry'].message)
+                            if file_match:
+                                existing_files.add(os.path.basename(file_match.group(1)))
+                        
+                        # Only merge if they share the same file
+                        if session_files & existing_files:  # Intersection check
+                            existing_data['events'].extend(session_data['events'])
+                            if session_timestamp > existing_timestamp:
+                                existing_data['latest_timestamp'] = session_timestamp
+                            if session_data['earliest_timestamp'] < existing_data['earliest_timestamp']:
+                                existing_data['earliest_timestamp'] = session_data['earliest_timestamp']
+                            merged = True
+                            break
             
             if not merged:
                 merged_sessions[session_id] = session_data
